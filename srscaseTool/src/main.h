@@ -10,7 +10,7 @@ static HWND hwnd_, hLblSuite, hEditSuite, hLblName, hEditName, hLblID, hEditID, 
 static HWND hTable, hEditContent, hBtnPrev, hBtnNext, hBtnSearch, hPageLabel, hSplitter;
 static HWND hEditSearchRichEdit, hBtnReset, hStatusBar;
 static HWND hCheckRegex;
-static HWND hBtnPrevMatch, hBtnNextMatch;
+static HWND hBtnPrevMatch, hBtnNextMatch, hEditGotoPage, hBtnGotoPage;
 Database* g_db = nullptr;
 static std::vector<CaseRecord> allRecords; // 搜索完整数据
 

@@ -95,7 +95,9 @@ void LayoutChildren(HWND hWnd, SplitterState& state) {
     // Pagination controls
     deferMove(hBtnPrev, xs, buttonY, 90, eh);
     deferMove(hBtnNext, xs + 100, buttonY, 90, eh);
-    deferMove(hPageLabel, xs + 200, buttonY, pageLabelW, eh);
+    deferMove(hEditGotoPage, xs + 100 + 90, buttonY, 40, eh);
+    deferMove(hBtnGotoPage, xs + 190 + 40, buttonY, 48, eh);
+    deferMove(hPageLabel, xs + 230+48+padding, buttonY, pageLabelW, eh);
 
     // Apply all moves at once
     EndDeferWindowPos(hdwp);
@@ -231,7 +233,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 int tableHeight = 360; // 增加表格高度
 
                 hTable = CreateWindowEx(0, WC_LISTVIEW, nullptr,
-                                        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL,
+                                        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
                                         xs, top_height, tableWidth, tableHeight, hWnd, (HMENU)IDC_LISTVIEW, nullptr, nullptr);
                 ListView_SetExtendedListViewStyle(hTable, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 
@@ -265,6 +267,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                           WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, xs, bt_y, 90, eh, hWnd, (HMENU)IDC_BTN_PREV, nullptr, nullptr);
                 hBtnNext = CreateWindowEx(0, L"BUTTON", L"下一页",
                                           WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, xs + 100, bt_y, 90, eh, hWnd, (HMENU)IDC_BTN_NEXT, nullptr, nullptr);
+
+                hEditGotoPage = CreateWindowEx(0, L"EDIT", NULL,
+                                               WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+                                               0, 0, 40, 22, hWnd, (HMENU)IDC_EDIT_GOTO_PAGE, nullptr, nullptr);
+
+                SendMessage(hEditGotoPage, EM_LIMITTEXT, 6, 0); // 限制最大6位数字
+                SendMessage(hEditGotoPage, WM_SETFONT, (WPARAM)GetModernFont(), TRUE);
+
+                hBtnGotoPage = CreateWindowEx(0, L"BUTTON", L"跳页",
+                                              WS_CHILD | WS_VISIBLE,
+                                              0, 0, 48, 22, hWnd, (HMENU)IDC_BTN_GOTO_PAGE, nullptr, nullptr);
+
+
                 hPageLabel = CreateWindowEx(0, L"STATIC", L"0/0页",
                                             WS_CHILD | WS_VISIBLE | SS_CENTER, xs + 200, bt_y, pageLabelW, eh, hWnd, NULL, nullptr, nullptr);
 
@@ -275,7 +290,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 HFONT modernFont = GetModernFont();
                 for (HWND h : {hLblSuite, hEditSuite, hLblName, hEditName, hLblID, hEditID, hLblScriptID, hEditScriptID,
                                hLblModule, hComboModule, hLblText, hEditText,hCheckRegex, hBtnSearch, hBtnReset,
-                               hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent, hBtnNextMatch, hBtnPrevMatch, hStatusBar}) {
+                               hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent, hBtnNextMatch, hBtnPrevMatch, hStatusBar, hBtnGotoPage, hEditGotoPage}) {
                     SendMessage(h, WM_SETFONT, (WPARAM)modernFont, TRUE);
                 }
                 for (HWND h : { hEditSuite, hEditName,  hEditID,  hEditScriptID, hEditText, hEditSearchRichEdit}) {
@@ -382,7 +397,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 					}
 					else {
-                        RE2 reg(text);
+                        RE2 reg(text); // accept utf8 param
                         if(!reg.ok()){
                             MessageBoxW(hWnd, L"正则表达式语法错误", L"错误", MB_ICONERROR);
                         }else{
@@ -443,7 +458,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     RefreshTable(hTable, allRecords, pageIndex, pageSize);
                     UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
             }
+            else if (LOWORD(wParam) == IDC_BTN_GOTO_PAGE) {
+                wchar_t buf[12];
+                GetWindowTextW(hEditGotoPage, buf, 12);
+                int pageTarget = _wtoi(buf);
 
+                int totalPages = (int)allRecords.size() / pageSize + ((int)allRecords.size() % pageSize ? 1 : 0);
+
+                // 合法性判断
+                if (pageTarget < 1 || pageTarget > totalPages) {
+                    MessageBoxW(hWnd, L"页码无效！", L"提示", MB_ICONWARNING);
+                    break;
+                }
+                pageIndex = pageTarget - 1;
+                RefreshTable(hTable, allRecords, pageIndex, pageSize);
+                UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
+            }
             else if (LOWORD(wParam) == IDC_EDIT_SEARCH_RICH_CONTENT) {
                 if (HIWORD(wParam) == EN_CHANGE) {
                     // User changed input
@@ -515,28 +545,71 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
             }
             break;
-        case WM_NOTIFY:
-            if (((LPNMHDR)lParam)->idFrom == IDC_LISTVIEW && ((LPNMHDR)lParam)->code == LVN_ITEMCHANGED) {
-                NMLISTVIEW* pnm = (NMLISTVIEW*)lParam;
-                if (pnm->uNewState & LVIS_SELECTED) {
-                    int idx = pageIndex * pageSize + pnm->iItem;
-                    if (idx >= 0 && idx < (int)allRecords.size()) {
-                        SetWindowTextW(hEditContent, std::wstring(allRecords[idx].CASETXTCONTENT.begin(), allRecords[idx].CASETXTCONTENT.end()).c_str());
-                        int len = GetWindowTextLengthW(hEditSearchRichEdit);
-                        std::wstring searchText(len, L'\0');
-                        if (len > 0) {
-                            GetWindowTextW(hEditSearchRichEdit, &searchText[0], len + 1);
-                            SendMessage(hWnd,
-                                        WM_COMMAND,
-                                        MAKEWPARAM(IDC_EDIT_SEARCH_RICH_CONTENT, EN_CHANGE),
-                                        (LPARAM)searchText.c_str() );
-
+        case WM_NOTIFY: {
+            LPNMHDR pnmh = (LPNMHDR)lParam;
+            if (pnmh->idFrom == IDC_LISTVIEW) {
+                // ------- 处理选中变更 ----------
+                if (pnmh->code == LVN_ITEMCHANGED) {
+                    NMLISTVIEW* pnm = (NMLISTVIEW*)lParam;
+                    if (pnm->uNewState & LVIS_SELECTED) {
+                        int idx = pageIndex * pageSize + pnm->iItem;
+                        if (idx >= 0 && idx < (int)allRecords.size()) {
+                            SetWindowTextW(hEditContent, std::wstring(
+                                                                      allRecords[idx].CASETXTCONTENT.begin(), allRecords[idx].CASETXTCONTENT.end()).c_str());
+                            int len = GetWindowTextLengthW(hEditSearchRichEdit);
+                            std::wstring searchText(len, L'\0');
+                            if (len > 0) {
+                                GetWindowTextW(hEditSearchRichEdit, &searchText[0], len + 1);
+                                SendMessage(hWnd, WM_COMMAND,
+                                            MAKEWPARAM(IDC_EDIT_SEARCH_RICH_CONTENT, EN_CHANGE),
+                                            (LPARAM)searchText.c_str());
+                            }
                         }
-
                     }
                 }
+
+                // ------- 处理高亮自定义 ---------- 无效
+                // else if (pnmh->code == NM_CUSTOMDRAW) {
+                //     LPNMLVCUSTOMDRAW cd = (LPNMLVCUSTOMDRAW)lParam;
+                //     switch (cd->nmcd.dwDrawStage) {
+                //     case CDDS_PREPAINT:
+                //         return CDRF_NOTIFYITEMDRAW;
+                //     case CDDS_ITEMPREPAINT: {
+                //         BOOL selected = (ListView_GetItemState(cd->nmcd.hdr.hwndFrom, cd->nmcd.dwItemSpec, LVIS_SELECTED) & LVIS_SELECTED);
+                //         if (selected)
+                //             cd->clrTextBk = RGB(80,160,250); // 深色高亮
+                //         else
+                //             cd->clrTextBk = RGB(255,255,255); // 普通底色
+                //         return CDRF_DODEFAULT;
+                //     }
+                //     }
+                // }
             }
             break;
+        }
+        // case WM_NOTIFY:
+        //     LPNMHDR pnmh = (LPNMHDR)lParam;
+        //     if (((LPNMHDR)lParam)->idFrom == IDC_LISTVIEW && ((LPNMHDR)lParam)->code == LVN_ITEMCHANGED) {
+        //         NMLISTVIEW* pnm = (NMLISTVIEW*)lParam;
+        //         if (pnm->uNewState & LVIS_SELECTED) {
+        //             int idx = pageIndex * pageSize + pnm->iItem;
+        //             if (idx >= 0 && idx < (int)allRecords.size()) {
+        //                 SetWindowTextW(hEditContent, std::wstring(allRecords[idx].CASETXTCONTENT.begin(), allRecords[idx].CASETXTCONTENT.end()).c_str());
+        //                 int len = GetWindowTextLengthW(hEditSearchRichEdit);
+        //                 std::wstring searchText(len, L'\0');
+        //                 if (len > 0) {
+        //                     GetWindowTextW(hEditSearchRichEdit, &searchText[0], len + 1);
+        //                     SendMessage(hWnd,
+        //                                 WM_COMMAND,
+        //                                 MAKEWPARAM(IDC_EDIT_SEARCH_RICH_CONTENT, EN_CHANGE),
+        //                                 (LPARAM)searchText.c_str() );
+
+        //                 }
+
+        //             }
+        //         }
+        //     }
+        //     break;
         case WM_CTLCOLORSTATIC: {
             // Uniform background coloring - make labels blend with main window
             // Default static control background appears as light gray and needs adjustment
