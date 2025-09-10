@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include "Database.h"
+
 HWND ShowWaitSpinner(HWND hWndMain) {
     // Create overlay window (no border)
     RECT rc; GetWindowRect(hWndMain, &rc);
@@ -111,4 +112,127 @@ void UpdatePageStatus(HWND hWndPage, int pageIndex, int total, int pageSize)
     wchar_t buf[64] = {0};
     swprintf(buf, 64, L"%d / %d 页，%d条", pageIndex + 1, pageCount, total);
     SetWindowText(hWndPage, buf);
+}
+
+
+
+void ClearRichEditFormat(HWND hRichEdit) {
+    // Get the text length in characters (not bytes)
+    LONG textLen = GetWindowTextLengthW(hRichEdit);
+
+    // Select all text
+    SendMessageW(hRichEdit, EM_SETSEL, 0, textLen);
+
+    // Reset character formatting to default
+    CHARFORMAT2W cf;
+    ZeroMemory(&cf, sizeof(cf));
+    cf.cbSize = sizeof(cf);
+    cf.dwMask = CFM_COLOR | CFM_BACKCOLOR | CFM_WEIGHT | CFM_ITALIC | CFM_UNDERLINE | CFM_STRIKEOUT;
+    cf.crTextColor = RGB(0, 0, 0); // Black text
+    cf.crBackColor = RGB(255, 255, 255); // White background
+    cf.dwEffects = 0; // Remove all effects (bold, italic, etc.)
+    cf.wWeight = FW_NORMAL; // Normal weight
+
+    SendMessageW(hRichEdit, EM_SETCHARFORMAT, SCF_SELECTION, reinterpret_cast<LPARAM>(&cf));
+
+    // Deselect
+    SendMessageW(hRichEdit, EM_SETSEL, -1, 0);
+}
+
+// Get plain text from RichEdit control without formatting
+std::wstring GetPlainTextFromRichEdit(HWND hRichEdit) {
+    // Get the text length in characters
+    int textLen = GetWindowTextLengthW(hRichEdit);
+
+    if (textLen <= 0) {
+        return L"";
+    }
+
+    // Allocate buffer for the text (plus null terminator)
+    std::wstring plainText(textLen + 1, L'\0');
+
+    // Use EM_GETTEXT to get plain text (simpler approach)
+    GetWindowTextW(hRichEdit, &plainText[0], textLen + 1);
+
+    // Resize to actual length (remove null terminator)
+    plainText.resize(textLen);
+
+    return plainText;
+}
+
+static int currentMatchIndex = 0;
+static std::vector<size_t> lastMatches;
+void ScrollToMatch(HWND hRichEdit, int matchIndex, size_t matchLen) {
+    if (matchIndex < 0 || matchIndex >= (int)lastMatches.size()) return;
+
+    LONG start = (LONG)lastMatches[matchIndex];
+    LONG end = start + (LONG)matchLen;
+
+    // Select the match (use EX version for >64K safety)
+    CHARRANGE cr{ start, end };
+    SendMessageW(hRichEdit, EM_EXSETSEL, 0, (LPARAM)&cr);
+
+    // Show selection even when the control doesn't have focus
+    SendMessageW(hRichEdit, EM_HIDESELECTION, FALSE, 0);
+
+    // Scroll vertically to make the start line visible
+    LRESULT targetLine = SendMessageW(hRichEdit, EM_EXLINEFROMCHAR, 0, start);
+    LRESULT firstVisible = SendMessageW(hRichEdit, EM_GETFIRSTVISIBLELINE, 0, 0);
+
+    int delta = (int)targetLine - (int)firstVisible;
+    if (delta != 0) {
+        SendMessageW(hRichEdit, EM_LINESCROLL, 0, delta);
+    }
+
+    currentMatchIndex = matchIndex;
+}
+
+
+// Function to navigate to next match
+void GoToNextMatch(HWND hRichEdit, size_t matchLen) {
+    if (lastMatches.empty()) return;
+
+    int nextIndex = (currentMatchIndex + 1) % (int)lastMatches.size();
+    ScrollToMatch(hRichEdit, nextIndex, matchLen);
+}
+
+// Function to navigate to previous match
+void GoToPreviousMatch(HWND hRichEdit, size_t matchLen) {
+    if (lastMatches.empty()) return;
+
+    int prevIndex = (currentMatchIndex - 1 + (int)lastMatches.size()) % (int)lastMatches.size();
+    ScrollToMatch(hRichEdit, prevIndex, matchLen);
+}
+
+// Modified HighlightMatches function with auto-scroll to first match
+void HighlightMatches(HWND hRichEdit, const std::vector<size_t>& matchPositions, size_t matchLen) {
+    // Store matches for navigation
+    lastMatches = matchPositions;
+    currentMatchIndex = 0;
+
+    for (size_t pos : matchPositions) {
+        CHARRANGE range = { (LONG)pos, (LONG)(pos + matchLen) };
+
+        // Select the match
+        SendMessageW(hRichEdit, EM_SETSEL, range.cpMin, range.cpMax);
+
+        // Apply red color
+        CHARFORMAT2W cf;
+        ZeroMemory(&cf, sizeof(cf));
+        cf.cbSize = sizeof(cf);
+        cf.dwMask = CFM_COLOR | CFM_BACKCOLOR;
+        cf.crTextColor = RGB(255, 0, 0); // Red text
+        cf.crBackColor = RGB(255, 255, 0); // Yellow background for better visibility
+
+        SendMessageW(hRichEdit, EM_SETCHARFORMAT, SCF_SELECTION, reinterpret_cast<LPARAM>(&cf));
+    }
+
+    // Auto-scroll to first match if any matches found
+    if (!matchPositions.empty()) {
+        ScrollToMatch(hRichEdit, 0, matchLen);
+    }
+    else {
+        // Deselect if no matches
+        SendMessageW(hRichEdit, EM_SETSEL, -1, 0);
+    }
 }

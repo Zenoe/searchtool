@@ -6,6 +6,7 @@ constexpr int wh = 1000;
 
 constexpr int searchInputStyle = WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NOHIDESEL | ES_LEFT;
 
+constexpr int padding = 6;
 constexpr int xs = 20;           // 水平间距
 constexpr int ys = 12;           // 垂直间距
 constexpr int eh = 28;           // 输入框高度
@@ -40,6 +41,7 @@ enum {
     IDC_BTN_PREV,
     IDC_BTN_NEXT,
     IDC_BTN_SEARCH,
+    IDC_BTN_RESET,
     IDC_EDIT_SUITE,
     IDC_EDIT_NAME,
     IDC_EDIT_ID,
@@ -48,5 +50,9 @@ enum {
     IDC_EDIT_TEXT,
     IDC_LISTVIEW,
     IDC_EDIT_CONTENT,
+    IDC_EDIT_SEARCH_RICH_CONTENT,
+    IDC_BTN_PREVTEXT,
+    IDC_BTN_NEXTTEXT,
+    IDC_CHECK_REGEX,
 };
 #endif // CONSTANT_H_

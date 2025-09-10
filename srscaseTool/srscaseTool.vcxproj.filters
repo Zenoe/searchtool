@@ -22,6 +22,7 @@
   <ItemGroup>
     <ClCompile Include="src\Database.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\stringutil.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Database.h" />

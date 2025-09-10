@@ -4,14 +4,14 @@
 #include <vector>
 #include <richedit.h>
 #include <windowsx.h>
+// #include <regex>
+#include <re2/re2.h>
 #include "stringutil.h"
 #include "constant.h"
 #include "helper.h"
 #include "main.h"
 
 #pragma comment(lib, "comctl32.lib")
-
-// ListView分页刷新
 
 void LayoutChildren(HWND hWnd, SplitterState& state) {
     RECT rc;
@@ -63,14 +63,16 @@ void LayoutChildren(HWND hWnd, SplitterState& state) {
         x += group.labelWidth + group.controlWidth + xs;
     }
 
+    deferMove(hCheckRegex, x-xs, row1Y, 90, 22);
     // Second row
     x = xs;
     deferMove(hBtnSearch, x, row2Y, 100, eh);
+    deferMove(hBtnReset, x + 100 + padding, row2Y, 100, eh);
 
     // Table and content area
     int tableWidth = 0;
     if (state.splitterX == 0) {
-        tableWidth = w * 2 / 3 - xs * 2;
+        tableWidth = w * 1 / 2 - xs * 2;
         state.splitterX = xs + tableWidth + xs;
     } else {
         tableWidth = state.splitterX - xs - 6;
@@ -85,7 +87,11 @@ void LayoutChildren(HWND hWnd, SplitterState& state) {
 
     deferMove(hTable, xs, topSectionHeight, tableWidth, contentHeight);
     deferMove(hEditContent, contentX, topSectionHeight, contentWidth, contentHeight);
-    deferMove(hEditSearchRichEdit,buttonY, topSectionHeight + contentHeight, 200, eh );
+    deferMove(hEditSearchRichEdit,contentX, topSectionHeight + contentHeight, 200, eh );
+    deferMove(hBtnPrevMatch,contentX + 200 + padding, topSectionHeight + contentHeight, 30, eh );
+    deferMove(hBtnNextMatch,contentX + 200 +  padding  + 30, topSectionHeight + contentHeight, 30, eh );
+    deferMove(hStatusBar,contentX + 200 +  ( padding *2  ) +  60 , topSectionHeight + contentHeight, 400, eh );
+
     // Pagination controls
     deferMove(hBtnPrev, xs, buttonY, 90, eh);
     deferMove(hBtnNext, xs + 100, buttonY, 90, eh);
@@ -161,17 +167,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     // 所有控件
     static SplitterState state;
+    static std::wstring lastSearchText;
 
     switch (msg)
         {
         case WM_CREATE:
             {
                 InitCommonControlsEx(nullptr);
-
-                // 位置参数
                 int x = xs;
-
-                // 第一行控件
                 int row1Y = yt;
 
                 hLblSuite = CreateLabel(hWnd, L"用例包：", x, row1Y, 70, lh, IDC_STATIC_SUITE);
@@ -201,15 +204,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 hLblText = CreateLabel(hWnd, L"内容：", x, 0, 60, lh, IDC_STATIC_TEXT);
                 hEditText = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", nullptr,
                                            searchInputStyle, x + 60, 0, 220, eh, hWnd, (HMENU)IDC_EDIT_TEXT, nullptr, nullptr);
-
+                hCheckRegex = CreateWindowEx(0, L"BUTTON", L"正则匹配",
+                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                  0, 0, 80, 22, hWnd, (HMENU)IDC_CHECK_REGEX, nullptr, nullptr);
                 hEditSearchRichEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", nullptr,
-                                           searchInputStyle, 0, 0, 220, eh, hWnd, (HMENU)IDC_EDIT_TEXT, nullptr, nullptr);
+                                                     searchInputStyle, 0, 0, 220, eh, hWnd, (HMENU)IDC_EDIT_SEARCH_RICH_CONTENT, nullptr, nullptr);
+                if (hEditSearchRichEdit) {
+                    SetWindowSubclass(hEditSearchRichEdit, EditSubclassProc, 0, 0);
+                }
 
+
+                hBtnPrevMatch = CreateWindowEx(0, L"BUTTON", L"<",
+                                          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 0,0, 90, eh, hWnd, (HMENU)IDC_BTN_PREVTEXT, nullptr, nullptr);
+                hBtnNextMatch = CreateWindowEx(0, L"BUTTON", L">",
+                                          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 0, 0, 90, eh, hWnd, (HMENU)IDC_BTN_NEXTTEXT, nullptr, nullptr);
                 int row2Y = row1Y + eh + ys;
                 x = xs;
                 hBtnSearch = CreateWindowEx(0, L"BUTTON", L"搜索",
                                             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, x, row2Y, 100, eh, hWnd, (HMENU)IDC_BTN_SEARCH, nullptr, nullptr);
 
+                hBtnReset = CreateWindowEx(0, L"BUTTON", L"重置",
+                                            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, x, row2Y, 100, eh, hWnd, (HMENU)IDC_BTN_RESET, nullptr, nullptr);
                 // 表格（LISTVIEW） - 调整位置和大小
                 int top_height = row2Y + eh + ys + 10;  // 增加更多间距
                 int tableWidth = 700;  // 增加表格宽度
@@ -231,17 +246,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     ListView_InsertColumn(hTable, i, &lvc);
                 }
 
-                // hSplitter = CreateWindowEx(0, L"STATIC", nullptr,
-                //                            WS_CHILD | WS_VISIBLE | SS_NOTIFY, 0, top_height, splitterW, tableHeight,
-                //                            hWnd, nullptr, nullptr, nullptr);
-                // SetWindowLong(hSplitter, GWL_EXSTYLE, GetWindowLong(hSplitter, GWL_EXSTYLE) | WS_EX_TRANSPARENT);
-
                 // 右侧内容区 - 调整位置和大小
                 int contentX = xs + tableWidth + xs;  // 与表格保持间距
                 int contentWidth = 340;
-                hEditContent = CreateWindowEx(WS_EX_CLIENTEDGE, MSFTEDIT_CLASS, nullptr,
-                                              WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
-                                              contentX, top_height, contentWidth, tableHeight, hWnd, (HMENU)IDC_EDIT_CONTENT, nullptr, nullptr);
+                hEditContent = CreateWindowExW(0, MSFTEDIT_CLASS, L"",
+                                            WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE |
+                                            ES_AUTOVSCROLL | WS_VSCROLL | ES_READONLY,
+                                            contentX, top_height, contentWidth, tableHeight,
+                                            hWnd, (HMENU)IDC_EDIT_CONTENT, nullptr, nullptr);
+
+                // hEditContent = CreateWindowEx(WS_EX_CLIENTEDGE, MSFTEDIT_CLASS, nullptr,
+                //                               WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+                //                               contentX, top_height, contentWidth, tableHeight, hWnd, (HMENU)IDC_EDIT_CONTENT, nullptr, nullptr);
 
                 // 分页控件+按钮 - 调整位置
                 int bt_y = top_height + tableHeight + 15;  // 增加间距
@@ -252,15 +268,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 hPageLabel = CreateWindowEx(0, L"STATIC", L"0/0页",
                                             WS_CHILD | WS_VISIBLE | SS_CENTER, xs + 200, bt_y, pageLabelW, eh, hWnd, NULL, nullptr, nullptr);
 
+                hStatusBar = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                                             0, 0, 0, 0,
+                                             hWnd, nullptr, nullptr, nullptr);
                 // Font
                 HFONT modernFont = GetModernFont();
                 for (HWND h : {hLblSuite, hEditSuite, hLblName, hEditName, hLblID, hEditID, hLblScriptID, hEditScriptID,
-                               hLblModule, hComboModule, hLblText, hEditText, hBtnSearch,
-                               hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent}) {
+                               hLblModule, hComboModule, hLblText, hEditText,hCheckRegex, hBtnSearch, hBtnReset,
+                               hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent, hBtnNextMatch, hBtnPrevMatch, hStatusBar}) {
                     SendMessage(h, WM_SETFONT, (WPARAM)modernFont, TRUE);
                 }
-                for (HWND h : { hEditSuite, hEditName,  hEditID,  hEditScriptID, hEditText}) {
-                SetWindowSubclass(h, EditProc, 0, 0);
+                for (HWND h : { hEditSuite, hEditName,  hEditID,  hEditScriptID, hEditText, hEditSearchRichEdit}) {
+                    SetWindowSubclass(h, EditProc, 0, 0);
                 }
                 // Load module options
                 auto modules = g_db->GetAllModules();
@@ -274,98 +293,211 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 break;
             }
 
-    case WM_LBUTTONDOWN:
-    {
-        int mx = GET_X_LPARAM(lParam);
-        int my = GET_Y_LPARAM(lParam);
-        RECT rc;
-        GetClientRect(hWnd, &rc);
+        case WM_LBUTTONDOWN:
+            {
+                int mx = GET_X_LPARAM(lParam);
+                int my = GET_Y_LPARAM(lParam);
+                RECT rc;
+                GetClientRect(hWnd, &rc);
 
-        // Check if in splitter area
-        if (mx >= state.splitterX && mx < state.splitterX + SPLITTER_WIDTH)
-        {
-            state.dragging = true;
-            SetCapture(hWnd);
-            state.dragOffset = mx - state.splitterX;
-        }
-        return 0;
-    }
-    case WM_MOUSEMOVE:
-    {
-        int mx = GET_X_LPARAM(lParam);
+                // Check if in splitter area
+                if (mx >= state.splitterX && mx < state.splitterX + SPLITTER_WIDTH)
+                    {
+                        state.dragging = true;
+                        SetCapture(hWnd);
+                        state.dragOffset = mx - state.splitterX;
+                    }
+                return 0;
+            }
+        case WM_MOUSEMOVE:
+            {
+                int mx = GET_X_LPARAM(lParam);
 
-        if (state.dragging)
-        {
-            RECT rc;
-            GetClientRect(hWnd, &rc);
-            int cx = rc.right - rc.left;
+                if (state.dragging)
+                    {
+                        RECT rc;
+                        GetClientRect(hWnd, &rc);
+                        int cx = rc.right - rc.left;
 
-            int newX = mx - state.dragOffset;
-            if (newX < MIN_PANEL_WIDTH) newX = MIN_PANEL_WIDTH;
-            if (newX > cx - MIN_PANEL_WIDTH - SPLITTER_WIDTH)
-                newX = cx - MIN_PANEL_WIDTH - SPLITTER_WIDTH;
+                        int newX = mx - state.dragOffset;
+                        if (newX < MIN_PANEL_WIDTH) newX = MIN_PANEL_WIDTH;
+                        if (newX > cx - MIN_PANEL_WIDTH - SPLITTER_WIDTH)
+                            newX = cx - MIN_PANEL_WIDTH - SPLITTER_WIDTH;
 
-            state.splitterX = newX;
-            LayoutChildren(hWnd, state);
-            // Visual feedback
-            InvalidateRect(hWnd, nullptr, FALSE);
-        }
-        else
-        {
-            // Change cursor if near splitter
-            if (mx >= state.splitterX && mx < state.splitterX + SPLITTER_WIDTH)
-                SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
-        }
-        return 0;
-    }
-    case WM_LBUTTONUP:
-    {
-        if (state.dragging)
-        {
-            state.dragging = false;
-            ReleaseCapture();
-        }
-        return 0;
-    }
+                        state.splitterX = newX;
+                        LayoutChildren(hWnd, state);
+                        // Visual feedback
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                    }
+                else
+                    {
+                        // Change cursor if near splitter
+                        if (mx >= state.splitterX && mx < state.splitterX + SPLITTER_WIDTH)
+                            SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
+                    }
+                return 0;
+            }
+        case WM_LBUTTONUP:
+            {
+                if (state.dragging)
+                    {
+                        state.dragging = false;
+                        ReleaseCapture();
+                    }
+                return 0;
+            }
         case WM_COMMAND:
             // 搜索按钮
             if (LOWORD(wParam) == IDC_BTN_SEARCH)
-			{
-				wchar_t wsuite[64], wname[64], wid[64], wscriptid[64], wtext[128];
-				wchar_t wmodule[64] = { 0 };
-				GetWindowTextW(hEditSuite, wsuite, 64);
-				GetWindowTextW(hEditName, wname, 64);
-				GetWindowTextW(hEditID, wid, 64);
-				GetWindowTextW(hEditScriptID, wscriptid, 64);
-				GetWindowTextW(hEditText, wtext, 128);
-				SendMessageW(hComboModule, CB_GETLBTEXT, SendMessageW(hComboModule, CB_GETCURSEL, 0, 0), (LPARAM)wmodule);
-				std::string suite = string_util::wstr_to_utf8(wsuite);
-				std::string name = string_util::wstr_to_utf8(wname);
-				std::string id = string_util::wstr_to_utf8(wid);
-				std::string scriptid = string_util::wstr_to_utf8(wscriptid);
-				std::string module = string_util::wstr_to_utf8(wmodule);
-				std::string text = string_util::wstr_to_utf8(wtext);
+                {
+                    BOOL useRegex = (SendMessage(hCheckRegex, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    wchar_t wsuite[64], wname[64], wid[64], wscriptid[64], wtext[128];
+                    wchar_t wmodule[64] = { 0 };
+                    GetWindowTextW(hEditSuite, wsuite, 64);
+                    GetWindowTextW(hEditName, wname, 64);
+                    GetWindowTextW(hEditID, wid, 64);
+                    GetWindowTextW(hEditScriptID, wscriptid, 64);
+                    GetWindowTextW(hEditText, wtext, 128);
+                    SendMessageW(hComboModule, CB_GETLBTEXT, SendMessageW(hComboModule, CB_GETCURSEL, 0, 0), (LPARAM)wmodule);
+                    std::string suite = string_util::wstr_to_utf8(wsuite);
+                    std::string name = string_util::wstr_to_utf8(wname);
+                    std::string id = string_util::wstr_to_utf8(wid);
+                    std::string scriptid = string_util::wstr_to_utf8(wscriptid);
+                    std::string module = string_util::wstr_to_utf8(wmodule);
+                    std::string text = string_util::wstr_to_utf8(wtext);
+                    std::vector<CaseRecord> records;
 
-				// SQL LIKE %
-                EnableWindow(hWnd, FALSE);
-                HWND hWait = ShowWaitSpinner(hWnd);
-				allRecords = g_db->Search(
-					suite.empty() ? "" : "%" + suite + "%",
-					name.empty() ? "" : "%" + name + "%",
-					id.empty() ? "" : "%" + id + "%",
-					scriptid.empty() ? "" : "%" + scriptid + "%",
-					module.empty() ? "" : "%" + module + "%",
-					text.empty() ? "" : "%" + text + "%"
-				);
-                DestroyWindow(hWait);
-                EnableWindow(hWnd, TRUE);
-                SetActiveWindow(hWnd);
+                    // SQL LIKE %
+                    EnableWindow(hWnd, FALSE);
+                    HWND hWait = ShowWaitSpinner(hWnd);
+                    if(!useRegex){
+                        records = g_db->Search(
+                                                  suite.empty() ? "" : "%" + suite + "%",
+                                                  name.empty() ? "" : "%" + name + "%",
+                                                  id.empty() ? "" : "%" + id + "%",
+                                                  scriptid.empty() ? "" : "%" + scriptid + "%",
+                                                  module.empty() ? "" : "%" + module + "%",
+                                                  text.empty() ? "" : "%" + text + "%"
+                                                 );
 
-				pageIndex = 0;
-				RefreshTable(hTable, allRecords, pageIndex, pageSize);
-				UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
-			}
+					}
+					else {
+                        RE2 reg(text);
+                        if(!reg.ok()){
+                            MessageBoxW(hWnd, L"正则表达式语法错误", L"错误", MB_ICONERROR);
+                        }else{
+                            auto rawRecords = g_db->Search(
+                                                           suite.empty() ? "" : "%" + suite + "%",
+                                                           name.empty() ? "" : "%" + name + "%",
+                                                           id.empty() ? "" : "%" + id + "%",
+                                                           scriptid.empty() ? "" : "%" + scriptid + "%",
+                                                           module.empty() ? "" : "%" + module + "%",
+                                                           "");// 内容字段不先筛
+                            records.clear();
+                            //try {
+                                    //std::wregex re(wtext, std::regex_constants::ECMAScript | std::regex_constants::icase);
+                                    for (const auto& rec : rawRecords) {
+                                        int clen = WideCharToMultiByte(CP_UTF8, 0, rec.CASETXTCONTENT.c_str(), -1, NULL, 0, NULL, NULL);
+                                        if (clen <= 1) continue;
+                                        std::string content_utf8(clen - 1, 0);
+                                        WideCharToMultiByte(CP_UTF8, 0, rec.CASETXTCONTENT.c_str(), -1, &content_utf8[0], clen, NULL, NULL);
 
+                                        if (RE2::PartialMatch(content_utf8, reg)) {
+                                            records.push_back(rec);
+    }
+                                        // if (std::regex_search(rec.CASETXTCONTENT, re)) {
+                                        //     records.push_back(rec);
+                                        // }
+                                    }
+                            //}
+                        }
+						// catch (...) {
+						// 	MessageBoxW(hWnd, L"正则表达式语法错误", L"错误", MB_ICONERROR);
+						// }
+					}
+                    DestroyWindow(hWait);
+                    EnableWindow(hWnd, TRUE);
+                    SetActiveWindow(hWnd);
+
+                    allRecords = records;
+                    pageIndex = 0;
+                    RefreshTable(hTable, allRecords, pageIndex, pageSize);
+                    UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
+                }else if (LOWORD(wParam) == IDC_BTN_RESET){
+                SetWindowTextW(hEditSuite, L"");
+                SetWindowTextW(hEditName, L"");
+                SetWindowTextW(hEditID, L"");
+                SetWindowTextW(hEditScriptID, L"");
+                SetWindowTextW(hEditText, L"");
+
+                // Set combo box selection to none (-1 means no selection)
+                SendMessageW(hComboModule, CB_SETCURSEL, (WPARAM)-1, 0);
+
+                    EnableWindow(hWnd, FALSE);
+                    HWND hWait = ShowWaitSpinner(hWnd);
+                    allRecords = g_db->Search();
+                    DestroyWindow(hWait);
+                    EnableWindow(hWnd, TRUE);
+                    SetActiveWindow(hWnd);
+                    pageIndex = 0;
+                    RefreshTable(hTable, allRecords, pageIndex, pageSize);
+                    UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
+            }
+
+            else if (LOWORD(wParam) == IDC_EDIT_SEARCH_RICH_CONTENT) {
+                if (HIWORD(wParam) == EN_CHANGE) {
+                    // User changed input
+                    int len = GetWindowTextLengthW(hEditSearchRichEdit);
+                    std::wstring searchText(len, L'\0');
+                    if (len > 0) {
+                        GetWindowTextW(hEditSearchRichEdit, &searchText[0], len + 1);
+                    }
+                    else {
+                        searchText.clear();
+                    }
+
+                    lastSearchText = searchText;
+
+                    // Get plain text from RichEdit (without formatting characters)
+                    std::wstring currText = GetPlainTextFromRichEdit(hEditContent);
+
+                    // Remove old formatting
+                    ClearRichEditFormat(hEditContent);
+
+                    // Find and highlight matches if search text is not empty
+                    if (!searchText.empty()) {
+                        auto matches = string_util::FindMatches(currText, searchText);
+                        HighlightMatches(hEditContent, matches, searchText.length());
+
+                        // Update status bar
+                        if (hStatusBar) {
+                            std::wstring statusText;
+                            if (matches.empty()) {
+                                statusText = L"未找到";
+                            }
+                            else {
+                                // statusText = std::to_wstring(matches.size()) + L" F3/Shift+F3 搜索下/上一个";
+                                statusText = L"找到 " + std::to_wstring(matches.size()) + L" 个匹配项";
+                            }
+                            SetWindowTextW(hStatusBar, statusText.c_str());
+                        }
+                    }
+                    else {
+                        lastMatches.clear();
+                        currentMatchIndex = 0;
+                        if (hStatusBar) {
+                            SetWindowTextW(hStatusBar, L"Ready");
+                        }
+                    }
+                }
+            }
+
+            else if(LOWORD(wParam) == IDC_BTN_NEXTTEXT){
+                GoToNextMatch(hEditContent, lastSearchText.length());
+            }
+            else if(LOWORD(wParam) == IDC_BTN_PREVTEXT){
+                GoToPreviousMatch(hEditContent, lastSearchText.length());
+            }
             // 下拉框筛选也可触发搜索（可选）
             else if (LOWORD(wParam) == IDC_COMBO_MODULE && HIWORD(wParam) == CBN_SELCHANGE) {
                 SendMessage(hWnd, WM_COMMAND, (WPARAM)IDC_BTN_SEARCH, 0); // 触发搜索
@@ -390,6 +522,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     int idx = pageIndex * pageSize + pnm->iItem;
                     if (idx >= 0 && idx < (int)allRecords.size()) {
                         SetWindowTextW(hEditContent, std::wstring(allRecords[idx].CASETXTCONTENT.begin(), allRecords[idx].CASETXTCONTENT.end()).c_str());
+                        int len = GetWindowTextLengthW(hEditSearchRichEdit);
+                        std::wstring searchText(len, L'\0');
+                        if (len > 0) {
+                            GetWindowTextW(hEditSearchRichEdit, &searchText[0], len + 1);
+                            SendMessage(hWnd,
+                                        WM_COMMAND,
+                                        MAKEWPARAM(IDC_EDIT_SEARCH_RICH_CONTENT, EN_CHANGE),
+                                        (LPARAM)searchText.c_str() );
+
+                        }
+
                     }
                 }
             }
@@ -412,17 +555,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
 
         case WM_PAINT:
-           {
-               PAINTSTRUCT ps;
-               HDC hdc = BeginPaint(hWnd, &ps);
-               RECT rc;
-               GetClientRect(hWnd, &rc);
-               // 填充背景为白色（或你需要的颜色）
-               FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
-               DrawSplitter(hWnd, state);
-               EndPaint(hWnd, &ps);
-               return 0;
-           }
+            {
+                PAINTSTRUCT ps;
+                HDC hdc = BeginPaint(hWnd, &ps);
+                RECT rc;
+                GetClientRect(hWnd, &rc);
+                // 填充背景为白色（或你需要的颜色）
+                FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+                DrawSplitter(hWnd, state);
+                EndPaint(hWnd, &ps);
+                return 0;
+            }
 
         case WM_SIZE: {
             LayoutChildren(hWnd, state);
@@ -490,4 +633,36 @@ LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UIN
         }
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    switch (msg) {
+    case WM_KEYDOWN: {
+        // Handle F3 for next match, Shift+F3 for previous match
+        if (wParam == VK_F3) {
+            // Get parent window and retrieve the static variables
+            HWND hParent = GetParent(hWnd);
+            HWND hRichEdit = GetDlgItem(hParent, IDC_EDIT_CONTENT);
+
+            // Get current search text length
+            int len = GetWindowTextLengthW(hWnd);
+
+            if (hRichEdit && len > 0) {
+                if (GetKeyState(VK_SHIFT) & 0x8000) {
+                    GoToPreviousMatch(hRichEdit, len);
+                }
+                else {
+                    GoToNextMatch(hRichEdit, len);
+                }
+            }
+            return 0;
+        }
+        break;
+    }
+    case WM_NCDESTROY: {
+        // Remove subclass when control is destroyed
+        RemoveWindowSubclass(hWnd, EditSubclassProc, uIdSubclass);
+        break;
+    }
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
 }

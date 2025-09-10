@@ -124,6 +124,9 @@ namespace string_util {
         return result;
     }
 
+
+    std::vector<size_t> FindMatches(const std::wstring& content, const std::wstring& searchText);
+
     // std::deque<std::wstring> filterVectorWithPats(
     //     const std::deque<std::wstring>& items,
     //     const std::wstring& pat
