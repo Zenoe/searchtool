@@ -1,7 +1,7 @@
 ﻿#include "Database.h"
 #include <stdexcept>
 
-#include "stringutil.h"
+#include "common/stringutil.h"
 
 Database::Database(const std::string& dbfile) {
     if (sqlite3_open(dbfile.c_str(), &db) != SQLITE_OK)
@@ -52,7 +52,7 @@ bool is_utf8(const std::string& str) {
     return true;
 }
 
-std::vector<CaseRecord> Database::Search(const std::string& suite, const std::string& name, const std::string& id, const std::string& scriptid, const std::string& module, const std::string& text) {
+std::vector<CaseRecord> Database::Search(const std::string& suite, const std::string& name, const std::string& id, const std::string& scriptid, const std::string& module, const std::string& text, const bool cbg) {
     std::vector<CaseRecord> recs;
     std::string sql = "SELECT CASESUITE,CASENAME,CASEID,SCRIPTID,COMPOSITONNAME,REMARK,CASETXTCONTENT FROM srscase WHERE 1=1";
     if (!suite.empty()) sql += " AND CASESUITE LIKE ?";
@@ -61,7 +61,11 @@ std::vector<CaseRecord> Database::Search(const std::string& suite, const std::st
     if (!scriptid.empty()) sql += " AND SCRIPTID LIKE ?";
     if (!module.empty()) sql += " AND COMPOSITONNAME LIKE ?";
     if (!text.empty()) sql += " AND CASETXTCONTENT LIKE ?";
-
+    if (cbg) {
+        // 只查主表用 exists
+        sql += " AND EXISTS (SELECT 1 FROM tcmgmt WHERE CASEDESCRIPTION = srscase.SCRIPTID )";
+        // sql += " JOIN tcmgmt ON tcmgmt.CASEDESCRIPTION = srscase.SCRIPTID";
+    }
     //bool aa = is_utf8(suite);
     //sql = u8"SELECT CASESUITE,CASENAME,CASEID,SCRIPTID,COMPOSITONNAME,REMARK,CASETXTCONTENT FROM srscase WHERE 1=1 AND CASESUITE LIKE '%RG-MPLS域-mpls-GN-TP%'";
     sqlite3_stmt* stmt;

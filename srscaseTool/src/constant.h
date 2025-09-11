@@ -16,9 +16,9 @@ constexpr int yt = 20;           // 顶部Y
 constexpr int row1Y = 20;
 constexpr int splitterW = 6;
 constexpr int pageLabelW = 220;
-int row2Y = row1Y + eh + ys;
+constexpr int row2Y = row1Y + eh + ys;
 // 顶部搜索区域高度
-int topSectionHeight = row2Y + eh + ys + 10;
+constexpr int topSectionHeight = row2Y + eh + ys + 10;
 
 
 const int SPLITTER_WIDTH = 4;
@@ -56,5 +56,8 @@ enum {
     IDC_CHECK_REGEX,
     IDC_EDIT_GOTO_PAGE,
     IDC_BTN_GOTO_PAGE,
+    IDC_CHECK_CBG,
+    IDC_COPY_LISTVIEW,
+    IDC_COPY_LISTVIEW_ROW,
 };
 #endif // CONSTANT_H_

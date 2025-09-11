@@ -5,6 +5,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="client">
+      <UniqueIdentifier>{f0ce0349-48f9-40da-a929-fa648c689ebc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{9470a055-9831-4d13-9af3-d9c0486d5ec7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="srscaseTool.rc">
@@ -21,13 +27,49 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Database.cpp" />
-    <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\stringutil.cpp" />
+    <ClCompile Include="src\client\main.cpp">
+      <Filter>client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\client\MainWindow.cpp">
+      <Filter>client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\common\Logger.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\client\CSVParser.cpp">
+      <Filter>client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\common\stringutil.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\client\HttpClient.cpp">
+      <Filter>client</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Database.h" />
-    <ClInclude Include="src\stringutil.h" />
     <ClInclude Include="src\constant.h" />
     <ClInclude Include="src\helper.h" />
+    <ClInclude Include="src\client\MainWindow.h">
+      <Filter>client</Filter>
+    </ClInclude>
+    <ClInclude Include="src\client\UploadDialog.h">
+      <Filter>client</Filter>
+    </ClInclude>
+    <ClInclude Include="src\common\Logger.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\common\Models.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\client\CSVParser.h">
+      <Filter>client</Filter>
+    </ClInclude>
+    <ClInclude Include="src\common\stringutil.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\client\HttpClient.h">
+      <Filter>client</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

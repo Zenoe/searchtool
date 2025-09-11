@@ -654,10 +654,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
+int WINAPI bkWinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
 {
-
-
     setlocale(LC_ALL, "chs");
     LoadLibraryW(L"Msftedit.dll"); // RichEdit 4/5
 

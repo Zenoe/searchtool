@@ -1,4 +1,4 @@
-// string_util.h
+ï»¿// string_util.h
 #pragma once
 #include <Windows.h>
 #include <string>
@@ -24,24 +24,24 @@ namespace string_util {
 
     //inline std::string wstr_to_utf8(const std::wstring& wstr, UINT codePage = CP_UTF8) {
     inline std::string wstr_to_utf8(const std::wstring& wstr, UINT codePage = CP_UTF8) {
-        // ¼ÆËãĞèÒª¶à´óµÄ»º³åÇøÀ´´æ´¢×ª»»ºóµÄ×Ö·û´®
+        // è®¡ç®—éœ€è¦å¤šå¤§çš„ç¼“å†²åŒºæ¥å­˜å‚¨è½¬æ¢åçš„å­—ç¬¦ä¸²
         int bufferSize = WideCharToMultiByte(codePage, 0, wstr.c_str(), (int)wstr.length(), NULL, 0, NULL, NULL);
         if (bufferSize == 0) {
-            // ×ª»»Ê§°Ü
+            // è½¬æ¢å¤±è´¥
             return "";
         }
 
-        // ·ÖÅä»º³åÇø
+        // åˆ†é…ç¼“å†²åŒº
         std::vector<char> buffer(bufferSize);
 
-        // Ö´ĞĞÊµ¼ÊµÄ×ª»»
+        // æ‰§è¡Œå®é™…çš„è½¬æ¢
         int convertedSize = WideCharToMultiByte(codePage, 0, wstr.c_str(), (int)wstr.length(), buffer.data(), bufferSize, NULL, NULL);
         if (convertedSize == 0) {
-            // ×ª»»Ê§°Ü
+            // è½¬æ¢å¤±è´¥
             return "";
         }
 
-        // ½«»º³åÇøÄÚÈİ×ª»»Îªstd::string
+        // å°†ç¼“å†²åŒºå†…å®¹è½¬æ¢ä¸ºstd::string
         return std::string(buffer.data(), convertedSize);
     }
     //inline std::string wstr_to_utf8(const std::wstring& wstr) {

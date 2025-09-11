@@ -18,7 +18,8 @@ public:
                                    const std::string& arg3 = "",
                                    const std::string& arg4 = "",
                                    const std::string& arg5 = "",
-                                   const std::string& arg6 = ""
+                                   const std::string& arg6 = "",
+                                   const bool cbg = false
                                   );
 
 private:
