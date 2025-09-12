@@ -45,6 +45,9 @@
     <ClCompile Include="src\client\HttpClient.cpp">
       <Filter>client</Filter>
     </ClCompile>
+    <ClCompile Include="src\client\UploadDialog.cpp">
+      <Filter>client</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Database.h" />

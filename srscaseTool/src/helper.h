@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include "Database.h"
+#include "common/stringutil.h"
 
 HWND ShowWaitSpinner(HWND hWndMain) {
     // Create overlay window (no border)
@@ -78,13 +79,12 @@ void DrawSplitter(HWND hwnd, SplitterState& state)
     ReleaseDC(hwnd, hdc);
 }
 
-
-// 工具: LABEL创建
-HWND CreateLabel(HWND parent, LPCWSTR text, int x, int y, int w, int h, int id) {
+HWND CreateLabel(HWND parent, LPCWSTR text, int x, int y, int w, int h, UINT_PTR id) {
+    //  64 位 Windows 上，HMENU 实际为指针型，强制转换低位 int 可能丢失高位数据，id 不要为int 类型 
     return CreateWindowEx(0, L"STATIC", text, WS_CHILD | WS_VISIBLE, x, y, w, h, parent, (HMENU)id, NULL, NULL);
 }
 
-void RefreshTable(HWND hList, const std::vector<CaseRecord>& data, int pageIndex, int pageSize)
+void RefreshTable(HWND hList, const std::vector<CaseRecord>& data, int pageIndex, int pageSize, bool showExtra)
 {
     ListView_DeleteAllItems(hList);
 
@@ -102,10 +102,12 @@ void RefreshTable(HWND hList, const std::vector<CaseRecord>& data, int pageIndex
         ListView_SetItemText(hList, lvi.iItem, 3, (LPWSTR)data[i].SCRIPTID.c_str());
         ListView_SetItemText(hList, lvi.iItem, 4, (LPWSTR)data[i].COMPOSITONNAME.c_str());
         ListView_SetItemText(hList, lvi.iItem, 5, (LPWSTR)data[i].REMARK.c_str());
+        if(showExtra){
+            ListView_SetItemText(hList, lvi.iItem, 6, string_util::joinWstrings( data[i].matched_lines ));
+        }
     }
 }
 
-// 页码显示辅助（可在界面加STATIC控件并刷新文本）
 void UpdatePageStatus(HWND hWndPage, int pageIndex, int total, int pageSize)
 {
     int pageCount = (total + pageSize - 1) / pageSize;
@@ -113,8 +115,6 @@ void UpdatePageStatus(HWND hWndPage, int pageIndex, int total, int pageSize)
     swprintf(buf, 64, L"%d / %d 页，%d条", pageIndex + 1, pageCount, total);
     SetWindowText(hWndPage, buf);
 }
-
-
 
 void ClearRichEditFormat(HWND hRichEdit) {
     // Get the text length in characters (not bytes)

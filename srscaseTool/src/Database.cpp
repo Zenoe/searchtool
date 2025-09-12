@@ -1,6 +1,6 @@
 ﻿#include "Database.h"
 #include <stdexcept>
-
+#include <sstream>
 #include "common/stringutil.h"
 
 Database::Database(const std::string& dbfile) {
@@ -24,7 +24,7 @@ std::vector<std::string> Database::GetAllModules() {
 }
 
 bool is_utf8(const std::string& str) {
-    int i = 0, len = str.size();
+    size_t i = 0, len = str.size();
     while (i < len) {
         unsigned char c = str[i];
         if ((c & 0x80) == 0) { // 0xxxxxxx, ASCII
@@ -52,50 +52,189 @@ bool is_utf8(const std::string& str) {
     return true;
 }
 
-std::vector<CaseRecord> Database::Search(const std::string& suite, const std::string& name, const std::string& id, const std::string& scriptid, const std::string& module, const std::string& text, const bool cbg) {
+std::vector<CaseRecord> Database::Search(
+    const std::string& suite,
+    const std::string& name,
+    const std::string& id,
+    const std::string& scriptid,
+    const std::string& module,
+    const std::string& text,
+    const bool cbg,
+    const bool isExact)
+{
     std::vector<CaseRecord> recs;
     std::string sql = "SELECT CASESUITE,CASENAME,CASEID,SCRIPTID,COMPOSITONNAME,REMARK,CASETXTCONTENT FROM srscase WHERE 1=1";
-    if (!suite.empty()) sql += " AND CASESUITE LIKE ?";
-    if (!name.empty()) sql += " AND CASENAME LIKE ?";
-    if (!id.empty()) sql += " AND CASEID LIKE ?";
-    if (!scriptid.empty()) sql += " AND SCRIPTID LIKE ?";
-    if (!module.empty()) sql += " AND COMPOSITONNAME LIKE ?";
-    if (!text.empty()) sql += " AND CASETXTCONTENT LIKE ?";
+
+    auto add_cond = [&](const std::string& val, const std::string& colname) {
+        if (!val.empty()) {
+            sql += isExact
+                ? " AND " + colname + " = ?"
+                : " AND " + colname + " LIKE ?" ;
+        }
+    };
+    add_cond(suite,      "CASESUITE");
+    add_cond(name,       "CASENAME");
+    add_cond(id,         "CASEID");
+    add_cond(scriptid,   "SCRIPTID");
+    add_cond(module,     "COMPOSITONNAME");
+    //add_cond(text,       "CASETXTCONTENT");
+
     if (cbg) {
-        // 只查主表用 exists
         sql += " AND EXISTS (SELECT 1 FROM tcmgmt WHERE CASEDESCRIPTION = srscase.SCRIPTID )";
-        // sql += " JOIN tcmgmt ON tcmgmt.CASEDESCRIPTION = srscase.SCRIPTID";
     }
-    //bool aa = is_utf8(suite);
-    //sql = u8"SELECT CASESUITE,CASENAME,CASEID,SCRIPTID,COMPOSITONNAME,REMARK,CASETXTCONTENT FROM srscase WHERE 1=1 AND CASESUITE LIKE '%RG-MPLS域-mpls-GN-TP%'";
+
+    if (!text.empty()) {
+        sql += " AND CASETXTCONTENT LIKE ?";
+    }
     sqlite3_stmt* stmt;
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
         int idx = 1;
-        // todo SQLITE_STATIC -> SQLITE_TRANSIENT
-        if (!suite.empty()) sqlite3_bind_text(stmt, idx++, suite.c_str(), -1, SQLITE_STATIC);
-        if (!name.empty()) sqlite3_bind_text(stmt, idx++, name.c_str(), -1, SQLITE_STATIC);
-        if (!id.empty()) sqlite3_bind_text(stmt, idx++, id.c_str(), -1, SQLITE_STATIC);
-        if (!scriptid.empty()) sqlite3_bind_text(stmt, idx++, scriptid.c_str(), -1, SQLITE_STATIC);
-        if (!module.empty()) sqlite3_bind_text(stmt, idx++, module.c_str(), -1, SQLITE_STATIC);
-        if (!text.empty()) sqlite3_bind_text(stmt, idx++, text.c_str(), -1, SQLITE_STATIC);
 
+        auto bind_cond = [&](const std::string& val) {
+            if (!val.empty()) {
+                if (isExact) {
+                    sqlite3_bind_text(stmt, idx++, val.c_str(), -1, SQLITE_STATIC);
+                } else {
+                    std::string fuzzy = "%" + val + "%";
+                    sqlite3_bind_text(stmt, idx++, fuzzy.c_str(), -1, SQLITE_TRANSIENT);
+                }
+            }
+        };
+        bind_cond(suite);
+        bind_cond(name);
+        bind_cond(id);
+        bind_cond(scriptid);
+        bind_cond(module);
+        // bind_cond(text);
+        if (!text.empty()) {
+            std::string fuzzy = "%" + text + "%";
+            sqlite3_bind_text(stmt, idx++, fuzzy.c_str(), -1, SQLITE_TRANSIENT);
+        }
         auto safe_get_text = [](sqlite3_stmt* s, int col) -> std::wstring {
             const char* content_utf8 = (const char*)sqlite3_column_text(s, col);
             if (content_utf8 == nullptr) return L"";
             return string_util::utf8_to_wstring(content_utf8);
         };
+
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             CaseRecord rec;
-            rec.CASESUITE = safe_get_text(stmt, 0);
-            rec.CASENAME = safe_get_text(stmt, 1);
-            rec.CASEID = safe_get_text(stmt, 2);
-            rec.SCRIPTID = safe_get_text(stmt, 3);
-            rec.COMPOSITONNAME = safe_get_text(stmt, 4);
-            rec.REMARK = safe_get_text(stmt, 5);
-            rec.CASETXTCONTENT = safe_get_text(stmt, 6);
+            rec.CASESUITE         = safe_get_text(stmt, 0);
+            rec.CASENAME          = safe_get_text(stmt, 1);
+            rec.CASEID            = safe_get_text(stmt, 2);
+            rec.SCRIPTID          = safe_get_text(stmt, 3);
+            rec.COMPOSITONNAME    = safe_get_text(stmt, 4);
+            rec.REMARK            = safe_get_text(stmt, 5);
+            rec.CASETXTCONTENT    = safe_get_text(stmt, 6);
+
+            if (!text.empty() && isExact && !rec.CASETXTCONTENT.empty()) {
+                std::wstring target = string_util::utf8_to_wstring(text);
+                std::wistringstream iss(rec.CASETXTCONTENT);
+                std::wstring line;
+                int line_no = 1;
+                while (std::getline(iss, line)) {
+                    std::vector<std::wstring> units = string_util::splitByFourSpaces(line);
+                    for(auto unit: units){
+                        if(unit.find(target) != std::wstring::npos){
+                            rec.matched_lines.push_back(std::to_wstring(line_no) + L":" + unit);
+                        }
+                    }
+
+                    // push word
+                    // std::wstringstream linestream(line);
+                    // std::wstring word;
+                    // while (linestream >> word) { // splits on whitespace
+                    //     if (word.find(target) != std::wstring::npos) {
+                    //         rec.matched_lines.push_back(std::to_wstring(line_no) + L":" + word);
+                    //     }
+                    // }
+
+
+                    // push tokens (very slow)
+                    // std::vector<std::wstring> tokens;
+                    // std::wstringstream linestream(line);
+                    // std::wstring word;
+                    // while (linestream >> word) tokens.push_back(word);
+                    // std::vector<std::wstring> target_tokens;
+                    // // Split target by whitespace (can use wstringstream too)
+                    // std::wstringstream targetstream(target);
+                    // while (targetstream >> word) target_tokens.push_back(word);
+                    // // Now, for each group in the line, compare target tokens with line tokens
+                    // for (size_t i = 0; i + target_tokens.size() <= tokens.size(); ++i) {
+                    //     bool match = true;
+                    //     for (size_t j = 0; j < target_tokens.size(); ++j) {
+                    //         if (tokens[i+j].find(target_tokens[j]) == std::wstring::npos) {
+                    //             match = false;
+                    //             break;
+                    //         }
+                    //     }
+                    //     if (match) {
+                    //         // Join the group tokens and push!
+                    //         std::wstring matched;
+                    //         for (size_t j = 0; j < target_tokens.size(); ++j) {
+                    //             if (j) matched += L"    ";
+                    //             matched += tokens[i+j];
+                    //         }
+                    //         rec.matched_lines.push_back(std::to_wstring(line_no) + L":" + matched);
+                    //     }
+                    // }
+
+                    // push whole line
+                    // if (line.find(target) != std::wstring::npos) {
+                    //     rec.matched_lines.push_back(std::to_wstring(line_no) + L":" + line);
+                    // }
+                    ++line_no;
+                }
+            }
             recs.push_back(rec);
         }
         sqlite3_finalize(stmt);
     }
     return recs;
 }
+// std::vector<CaseRecord> Database::Search(const bool isfuzzy, const std::string& suite, const std::string& name, const std::string& id, const std::string& scriptid, const std::string& module, const std::string& text, const bool cbg) {
+//     std::vector<CaseRecord> recs;
+//     std::string sql = "SELECT CASESUITE,CASENAME,CASEID,SCRIPTID,COMPOSITONNAME,REMARK,CASETXTCONTENT FROM srscase WHERE 1=1";
+//     if (!suite.empty()) sql += " AND CASESUITE LIKE ?";
+//     if (!name.empty()) sql += " AND CASENAME LIKE ?";
+//     if (!id.empty()) sql += " AND CASEID LIKE ?";
+//     if (!scriptid.empty()) sql += " AND SCRIPTID LIKE ?";
+//     if (!module.empty()) sql += " AND COMPOSITONNAME LIKE ?";
+//     if (!text.empty()) sql += " AND CASETXTCONTENT LIKE ?";
+//     if (cbg) {
+//         // 只查主表用 exists
+//         sql += " AND EXISTS (SELECT 1 FROM tcmgmt WHERE CASEDESCRIPTION = srscase.SCRIPTID )";
+//         // sql += " JOIN tcmgmt ON tcmgmt.CASEDESCRIPTION = srscase.SCRIPTID";
+//     }
+//     //bool aa = is_utf8(suite);
+//     //sql = u8"SELECT CASESUITE,CASENAME,CASEID,SCRIPTID,COMPOSITONNAME,REMARK,CASETXTCONTENT FROM srscase WHERE 1=1 AND CASESUITE LIKE '%RG-MPLS域-mpls-GN-TP%'";
+//     sqlite3_stmt* stmt;
+//     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+//         int idx = 1;
+//         // todo SQLITE_STATIC -> SQLITE_TRANSIENT
+//         if (!suite.empty()) sqlite3_bind_text(stmt, idx++, suite.c_str(), -1, SQLITE_STATIC);
+//         if (!name.empty()) sqlite3_bind_text(stmt, idx++, name.c_str(), -1, SQLITE_STATIC);
+//         if (!id.empty()) sqlite3_bind_text(stmt, idx++, id.c_str(), -1, SQLITE_STATIC);
+//         if (!scriptid.empty()) sqlite3_bind_text(stmt, idx++, scriptid.c_str(), -1, SQLITE_STATIC);
+//         if (!module.empty()) sqlite3_bind_text(stmt, idx++, module.c_str(), -1, SQLITE_STATIC);
+//         if (!text.empty()) sqlite3_bind_text(stmt, idx++, text.c_str(), -1, SQLITE_STATIC);
+
+//         auto safe_get_text = [](sqlite3_stmt* s, int col) -> std::wstring {
+//             const char* content_utf8 = (const char*)sqlite3_column_text(s, col);
+//             if (content_utf8 == nullptr) return L"";
+//             return string_util::utf8_to_wstring(content_utf8);
+//         };
+//         while (sqlite3_step(stmt) == SQLITE_ROW) {
+//             CaseRecord rec;
+//             rec.CASESUITE = safe_get_text(stmt, 0);
+//             rec.CASENAME = safe_get_text(stmt, 1);
+//             rec.CASEID = safe_get_text(stmt, 2);
+//             rec.SCRIPTID = safe_get_text(stmt, 3);
+//             rec.COMPOSITONNAME = safe_get_text(stmt, 4);
+//             rec.REMARK = safe_get_text(stmt, 5);
+//             rec.CASETXTCONTENT = safe_get_text(stmt, 6);
+//             recs.push_back(rec);
+//         }
+//         sqlite3_finalize(stmt);
+//     }
+//     return recs;
+// }

@@ -5,6 +5,7 @@
 
 struct CaseRecord {
     std::wstring CASESUITE, CASENAME, CASEID, SCRIPTID, COMPOSITONNAME, REMARK, CASETXTCONTENT;
+    std::vector<std::wstring> matched_lines;
 };
 
 class Database {
@@ -19,7 +20,8 @@ public:
                                    const std::string& arg4 = "",
                                    const std::string& arg5 = "",
                                    const std::string& arg6 = "",
-                                   const bool cbg = false
+                                   const bool cbg = false,
+                                   const bool isExact = false
                                   );
 
 private:

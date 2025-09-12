@@ -107,7 +107,7 @@ namespace string_util {
 
     // Template function for splitting
     template<typename StringT>
-    std::vector<StringT> split_by_space(const StringT& str) {
+    std::vector<StringT> splitByFourSpaces(const StringT& str) {
         using CharT = typename StringT::value_type;
         std::vector<StringT> result;
         size_t i = 0, n = str.length();
@@ -127,6 +127,8 @@ namespace string_util {
 
     std::vector<size_t> FindMatches(const std::wstring& content, const std::wstring& searchText);
 
+    std::vector<std::wstring> splitByFourSpaces(const std::wstring& s);
+    std::wstring joinWstrings(const std::vector<std::wstring>& lines);
     // std::deque<std::wstring> filterVectorWithPats(
     //     const std::deque<std::wstring>& items,
     //     const std::wstring& pat

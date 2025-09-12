@@ -42,7 +42,8 @@ private:
     HWND hEditSearchRichEdit, hBtnReset, hStatusBar;
     HWND hCheckRegex;
     HWND hBtnPrevMatch, hBtnNextMatch, hEditGotoPage, hBtnGotoPage;
-    HWND hCheckCBG;
+    HWND hCheckCBG, hCheckExactSearch;
+    HWND hBtnClearCasePkg;
 
     HINSTANCE m_hInstance;
     std::shared_ptr<Logger> m_logger;

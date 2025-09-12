@@ -22,7 +22,7 @@ private:
     INT_PTR HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     void InitializeDialog(HWND hwnd);
-    void StartUpload();
+    void StartUpload(HWND hwnd);
     void UpdateProgress(int percentComplete, const std::string& status);
     void UploadComplete(bool success, const std::string& message);
 

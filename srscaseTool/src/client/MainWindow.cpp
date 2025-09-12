@@ -10,7 +10,8 @@
 #include "../common/stringutil.h"
 #include "../helper.h"
 #include "../common/sysutil.h"
-// #include "UploadDialog.h"
+
+ #include "UploadDialog.h"
 
 
 #pragma comment(lib, "comctl32.lib")
@@ -22,6 +23,10 @@ MainWindow::MainWindow() : m_hwnd(nullptr), m_hInstance(nullptr) {
 
 MainWindow::~MainWindow() {
     m_logger->Info("Application shutting down...");
+    if(g_db){
+        delete g_db;
+        g_db = nullptr;
+    }
 }
 
 bool MainWindow::Initialize(HINSTANCE hInstance, int nCmdShow) {
@@ -29,7 +34,7 @@ bool MainWindow::Initialize(HINSTANCE hInstance, int nCmdShow) {
 
     LoadLibraryW(L"Msftedit.dll"); // RichEdit 4/5
 
-    g_db = new Database("srsautocase.db");
+    if(!g_db) g_db = new Database("srsautocase.db");
     // Initialize common controls
     INITCOMMONCONTROLSEX icc;
     icc.dwSize = sizeof(INITCOMMONCONTROLSEX);
@@ -167,6 +172,7 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
 			ListView_GetItem(hTable, &lvi);
 			CopyTextToClipboard(m_hwnd, buf);
+            break;
 		}
 		case IDC_COPY_LISTVIEW_ROW: {
 			// 获取整行内容
@@ -353,8 +359,10 @@ void MainWindow::HandleImportManagementCase() {
 }
 
 LRESULT MainWindow::HandleSearch(){
+
     BOOL useRegex = (SendMessage(hCheckRegex, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    BOOL searchCgb = (SendMessage(hCheckCBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    BOOL searchCbg = (SendMessage(hCheckCBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    BOOL searchExact = (SendMessage(hCheckExactSearch, BM_GETCHECK, 0, 0) == BST_CHECKED);
     wchar_t wsuite[64], wname[64], wid[64], wscriptid[64], wtext[128];
     wchar_t wmodule[64] = { 0 };
     GetWindowTextW(hEditSuite, wsuite, 64);
@@ -371,33 +379,51 @@ LRESULT MainWindow::HandleSearch(){
     std::string text = string_util::wstr_to_utf8(wtext);
     std::vector<CaseRecord> records;
 
+    HWND hWait = nullptr;
     // SQL LIKE %
-    EnableWindow(m_hwnd, FALSE);
-    HWND hWait = ShowWaitSpinner(m_hwnd);
     if(!useRegex){
-        records = g_db->Search(
-                               suite.empty() ? "" : "%" + suite + "%",
-                               name.empty() ? "" : "%" + name + "%",
-                               id.empty() ? "" : "%" + id + "%",
-                               scriptid.empty() ? "" : "%" + scriptid + "%",
-                               module.empty() ? "" : "%" + module + "%",
-                               text.empty() ? "" : "%" + text + "%",
-                               searchCgb
-                              );
+        EnableWindow(m_hwnd, FALSE);
+        hWait = ShowWaitSpinner(m_hwnd);
 
-    }
-    else {
-        RE2 reg(text); // accept utf8 param
-        if(!reg.ok()){
-            MessageBoxW(m_hwnd, L"正则表达式语法错误", L"错误", MB_ICONERROR);
-        }else{
+        records = g_db->Search(
+            suite.empty() ? "" : suite,
+            name.empty() ? "" : name,
+            id.empty() ? "" : id,
+            scriptid.empty() ? "" : scriptid,
+            module.empty() ? "" : module,
+            text.empty() ? "" : text,
+            searchCbg,
+            searchExact
+        );
+
+   //     records = g_db->Search(
+			//suite.empty() ? "" : "%" + suite + "%",
+			//name.empty() ? "" : "%" + name + "%",
+			//id.empty() ? "" : "%" + id + "%",
+			//scriptid.empty() ? "" : "%" + scriptid + "%",
+			//module.empty() ? "" : "%" + module + "%",
+			//text.empty() ? "" : "%" + text + "%",
+			//searchCbg,
+   //         searchExact
+			//);
+
+	}
+	else {
+		RE2 reg(text); // accept utf8 param
+		if (!reg.ok()) {
+			MessageBoxW(m_hwnd, L"正则表达式语法错误", L"错误", MB_ICONERROR);
+		}
+		else {
+            EnableWindow(m_hwnd, FALSE);
+            HWND hWait = ShowWaitSpinner(m_hwnd);
+
             auto rawRecords = g_db->Search(
                                            suite.empty() ? "" : "%" + suite + "%",
                                            name.empty() ? "" : "%" + name + "%",
                                            id.empty() ? "" : "%" + id + "%",
                                            scriptid.empty() ? "" : "%" + scriptid + "%",
                                            module.empty() ? "" : "%" + module + "%",
-                                           "");// 内容字段不先筛
+                                           "", searchCbg, searchExact);// 内容字段不先筛
             records.clear();
             //try {
             //std::wregex re(wtext, std::regex_constants::ECMAScript | std::regex_constants::icase);
@@ -420,7 +446,7 @@ LRESULT MainWindow::HandleSearch(){
         // 	MessageBoxW(m_hwnd, L"正则表达式语法错误", L"错误", MB_ICONERROR);
         // }
     }
-    DestroyWindow(hWait);
+    if(hWait) DestroyWindow(hWait);
     EnableWindow(m_hwnd, TRUE);
     SetActiveWindow(m_hwnd);
 
@@ -523,7 +549,11 @@ void MainWindow::HandleCreate(HWND phwnd) {
 	hLblSuite = CreateLabel(phwnd, L"用例包：", x, row1Y, 70, lh, IDC_STATIC_SUITE);
 	hEditSuite = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
 		searchInputStyle, 0, row1Y, 240, eh, phwnd, (HMENU)IDC_EDIT_SUITE, nullptr, nullptr);
-
+	// hBtnClearCasePkg = CreateWindowExW(0, L"BUTTON", L"X",
+	// 	WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_FLAT,
+	// 	0, 0, CLEARBTN_W, CLEARBTN_H,
+	// 	phwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+	//ShowWindow(hBtnClearCasePkg, SW_HIDE);
 
 	hLblName = CreateLabel(phwnd, L"用例名：", x, row1Y, 70, lh, IDC_STATIC_NAME);
 	hEditName = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", nullptr,
@@ -571,6 +601,9 @@ void MainWindow::HandleCreate(HWND phwnd) {
     hCheckCBG = CreateWindowEx(0, L"BUTTON", L"CBG SRS",
                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                  0, 0, 80, 22, phwnd, (HMENU)IDC_CHECK_CBG, nullptr, nullptr);
+    hCheckExactSearch = CreateWindowEx(0, L"BUTTON", L"精确查找",
+                                 WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                 0, 0, 80, 22, phwnd, (HMENU)IDC_CHECK_EXACT_SEARCH, nullptr, nullptr);
 
 	// 表格（LISTVIEW） - 调整位置和大小
 	int top_height = row2Y + eh + ys + 10;  // 增加更多间距
@@ -593,6 +626,7 @@ void MainWindow::HandleCreate(HWND phwnd) {
 		ListView_InsertColumn(hTable, i, &lvc);
 	}
 
+    ListView_SetColumnWidth(hTable, 3, 248);
 	// 右侧内容区 - 调整位置和大小
 	int contentX = xs + tableWidth + xs;  // 与表格保持间距
 	int contentWidth = 340;
@@ -634,7 +668,7 @@ void MainWindow::HandleCreate(HWND phwnd) {
 	// Font
 	HFONT modernFont = GetModernFont();
 	for (HWND h : {hLblSuite, hEditSuite, hLblName, hEditName, hLblID, hEditID, hLblScriptID, hEditScriptID,
-		hLblModule, hComboModule, hLblText, hEditText, hCheckRegex, hCheckCBG, hBtnSearch, hBtnReset,
+		hLblModule, hComboModule, hLblText, hEditText, hCheckRegex, hCheckCBG, hCheckExactSearch, hBtnSearch, hBtnReset,
 		hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent, hBtnNextMatch, hBtnPrevMatch, hStatusBar, hBtnGotoPage, hEditGotoPage}) {
 		SendMessage(h, WM_SETFONT, (WPARAM)modernFont, TRUE);
 	}
@@ -646,10 +680,10 @@ void MainWindow::HandleCreate(HWND phwnd) {
 	PopulateModules(hComboModule, modules);
 
 	// Initial 查询
-	allRecords = g_db->Search("", "", "", "", "", "");
 	pageIndex = 0;
-	RefreshTable(hTable, allRecords, pageIndex, pageSize);
-	UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
+	// allRecords = g_db->Search("", "", "", "", "", "");
+	// RefreshTable(hTable, allRecords, pageIndex, pageSize);
+	// UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
 }
 
 LRESULT MainWindow::HandleSize(){
@@ -690,6 +724,28 @@ LRESULT MainWindow::HandleNotify(LPARAM lParam){
 
             // 触发弹菜单函数
             ShowListViewContextMenu(hTable, m_hwnd, pt);
+        }else if(pnmh->code == NM_CUSTOMDRAW){
+            // give listview alternating row colors
+            NMLVCUSTOMDRAW* cd = (NMLVCUSTOMDRAW*)lParam;
+            switch(cd->nmcd.dwDrawStage) {
+            case CDDS_PREPAINT:
+                // Request item painting notifications
+                return CDRF_NOTIFYITEMDRAW;
+            case CDDS_ITEMPREPAINT: {
+                // Alternate color per row
+                int idx = (int)cd->nmcd.dwItemSpec;
+                COLORREF bk = (idx & 1) ? RGB(255, 255, 255) : RGB(245, 245, 240); // Change colors as desired
+                cd->clrTextBk = bk;
+                // Optional: darker text for selected rows
+                if (cd->nmcd.uItemState & CDIS_SELECTED) {
+                    // cd->clrTextBk = RGB(200, 220, 255);      // selected background
+                    cd->clrText   = RGB(0, 0, 80);           // darker text
+                } else {
+                    cd->clrText   = RGB(20, 20, 20);         // normal text
+                }
+                return CDRF_NEWFONT; // Use new background
+            }
+            }
         }
 
         // ------- 处理高亮自定义 ---------- 无效
@@ -786,7 +842,7 @@ void MainWindow::LayoutChildren(HWND hWnd, SplitterState& state) {
 
     // First row controls - using struct for better organization
     struct ControlGroup {
-        HWND label, control;
+        HWND label, control, clearBtn;
         int labelWidth, controlWidth;
     };
     RECT oldRect;
@@ -796,18 +852,24 @@ void MainWindow::LayoutChildren(HWND hWnd, SplitterState& state) {
     GetWindowRect(hBtnSearch, &oldRect);
     InvalidateRect(hWnd, &oldRect, TRUE);
     ControlGroup row1Controls[] = {
-        {hLblSuite, hEditSuite, 80, 180},
-        {hLblName, hEditName, 80, 180},
-        {hLblID, hEditID, 80, 180},
-        {hLblScriptID, hEditScriptID, 100, 160},
-        {hLblModule, hComboModule, 60, 160},
-        {hLblText, hEditText, 60, 220}
+        // {hLblSuite, hEditSuite, hBtnClearCasePkg, 80, 180},
+        {hLblSuite, hEditSuite, nullptr, 80, 180},
+        {hLblName, hEditName, nullptr, 80, 180},
+        {hLblID, hEditID, nullptr, 80, 180},
+        {hLblScriptID, hEditScriptID,nullptr,  100, 160},
+        {hLblModule, hComboModule,nullptr,  60, 160},
+        {hLblText, hEditText,nullptr,  60, 220}
     };
 
     int x = xs;
     for (const auto& group : row1Controls) {
         if (!deferMove(group.label, x, row1Y, group.labelWidth, lh)) break;
         if (!deferMove(group.control, x + group.labelWidth, row1Y, group.controlWidth, eh)) break;
+        if(group.clearBtn){
+            int btnx = x + group.labelWidth + group.controlWidth - CLEARBTN_W;
+            if (!deferMove(group.clearBtn, btnx, row1Y, CLEARBTN_W, CLEARBTN_H)) break;
+            SetWindowPos(group.clearBtn, HWND_TOP, btnx, row1Y, CLEARBTN_W, CLEARBTN_H, SWP_SHOWWINDOW);
+        }
         x += group.labelWidth + group.controlWidth + xs;
     }
 
@@ -817,6 +879,7 @@ void MainWindow::LayoutChildren(HWND hWnd, SplitterState& state) {
     deferMove(hBtnSearch, x, row2Y, 100, eh);
     deferMove(hBtnReset, x + 100 + padding, row2Y, 100, eh);
     deferMove(hCheckCBG, x + 200 + ( padding << 1 ), row2Y, 100, eh);
+    deferMove(hCheckExactSearch, x + 300 + (padding * 3), row2Y, 100, eh);
 
     // Table and content area
     int tableWidth = 0;
@@ -852,11 +915,9 @@ void MainWindow::LayoutChildren(HWND hWnd, SplitterState& state) {
     EndDeferWindowPos(hdwp);
 }
 bool MainWindow::UploadFile(const std::wstring& filePath, bool isAutomationCase, bool overwriteExisting) {
-    // fixme
     // Create and show upload dialog
-    // UploadDialog uploadDlg(m_hwnd, m_hInstance, filePath, isAutomationCase, overwriteExisting);
-    // return uploadDlg.ShowDialog();
-    return true;
+    UploadDialog uploadDlg(m_hwnd, m_hInstance, filePath, isAutomationCase, overwriteExisting);
+    return uploadDlg.ShowDialog();
 }
 LRESULT CALLBACK MainWindow::EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
@@ -867,6 +928,11 @@ LRESULT CALLBACK MainWindow::EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             SendMessage(hwnd, EM_SETSEL, 0, (LPARAM)-1);
             return 0;
         }
+    }
+    else if (msg == WM_LBUTTONDBLCLK)
+        {
+            SendMessage(hwnd, EM_SETSEL, 0, (LPARAM)-1);      // Select all
+            return 0;
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }

@@ -1,5 +1,6 @@
 ﻿#include "stringutil.h"
-
+#include <sstream>
+#include <iostream>
 namespace string_util {
 
     std::vector<size_t> FindMatches(const std::wstring& content, const std::wstring& searchText) {
@@ -49,5 +50,28 @@ namespace string_util {
 
         return matches;
     }
+    std::vector<std::wstring> splitByFourSpaces(const std::wstring& s) {
+        std::vector<std::wstring> tokens;
+        std::wstring delimiter = L"    ";
 
+        size_t start = 0, pos, dlen = delimiter.length();
+        while ((pos = s.find(delimiter, start)) != std::wstring::npos) {
+            tokens.push_back(s.substr(start, pos - start));
+            start = pos + dlen;
+        }
+        tokens.push_back(s.substr(start));
+        return tokens;
+    }
+
+
+    std::wstring joinWstrings(const std::vector<std::wstring>& lines) {
+        std::wostringstream oss;
+        bool first = true;
+        for (const auto& line : lines) {
+            if (!first) oss << L'\n';
+            oss << line;
+            first = false;
+        }
+        return oss.str();
+    }
   }

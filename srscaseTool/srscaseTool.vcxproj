@@ -121,6 +121,7 @@
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -141,6 +142,7 @@
     <ClCompile Include="src\client\HttpClient.cpp" />
     <ClCompile Include="src\client\main.cpp" />
     <ClCompile Include="src\client\MainWindow.cpp" />
+    <ClCompile Include="src\client\UploadDialog.cpp" />
     <ClCompile Include="src\common\Logger.cpp" />
     <ClCompile Include="src\common\stringutil.cpp" />
     <ClCompile Include="src\Database.cpp" />

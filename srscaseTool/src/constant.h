@@ -31,6 +31,9 @@ struct SplitterState
 };
 
 constexpr int pageSize = 40;      // 每页记录数
+
+const int CLEARBTN_W = 24; // width of the X button
+const int CLEARBTN_H = 24; // height
 enum {
     IDC_STATIC_SUITE = 2000,
     IDC_STATIC_NAME,
@@ -57,6 +60,7 @@ enum {
     IDC_EDIT_GOTO_PAGE,
     IDC_BTN_GOTO_PAGE,
     IDC_CHECK_CBG,
+    IDC_CHECK_EXACT_SEARCH,
     IDC_COPY_LISTVIEW,
     IDC_COPY_LISTVIEW_ROW,
 };
