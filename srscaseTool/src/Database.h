@@ -12,7 +12,7 @@ class Database {
 public:
     Database(const std::string& dbfile);
     ~Database();
-    std::vector<std::string> GetAllModules();
+    const std::vector<std::string> GetAllModules();
     std::vector<CaseRecord> Search(
                                    const std::string& arg1 = "",
                                    const std::string& arg2 = "",
@@ -26,4 +26,5 @@ public:
 
 private:
     sqlite3* db = nullptr;
+    std::vector<std::string> modules_;
 };

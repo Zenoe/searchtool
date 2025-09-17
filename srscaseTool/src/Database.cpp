@@ -8,20 +8,44 @@ Database::Database(const std::string& dbfile) {
         throw std::runtime_error("Cannot open database.");
 }
 Database::~Database() { if (db) sqlite3_close(db); }
-
-std::vector<std::string> Database::GetAllModules() {
-    std::vector<std::string> modules;
+const std::vector<std::string> Database::GetAllModules() {
+    // If cached, return immediately (document caching behavior!)
+    if (!modules_.empty()) return modules_;
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT DISTINCT COMPOSITONNAME FROM srscase;";
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+	const char* sql = "SELECT DISTINCT COMPOSITONNAME FROM srscase;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        // Log the error or throw an exception; don't silently fail
+        // throw std::runtime_error(sqlite3_errmsg(db));
+        return {};
+    }
+
+    try {
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             const unsigned char* ptxt = sqlite3_column_text(stmt, 0);
-            modules.emplace_back(ptxt ? reinterpret_cast<const char*>(ptxt) : "");
+            modules_.emplace_back(ptxt ? reinterpret_cast<const char*>(ptxt) : "");
         }
+    } catch (...) {
         sqlite3_finalize(stmt);
+        throw;
     }
-    return modules;
+    sqlite3_finalize(stmt);
+
+    return modules_;
 }
+ //const std::vector<std::string> Database::GetAllModules() {
+ //    if(!modules_.empty()) return modules_;
+ //    sqlite3_stmt* stmt = nullptr;
+ //    const char* sql = "SELECT DISTINCT COMPOSITONNAME FROM srscase;";
+ //    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+ //        while (sqlite3_step(stmt) == SQLITE_ROW) {
+ //            const unsigned char* ptxt = sqlite3_column_text(stmt, 0);
+ //            modules_.emplace_back(ptxt ? reinterpret_cast<const char*>(ptxt) : "");
+ //        }
+ //        sqlite3_finalize(stmt);
+ //    }
+ //    return modules_;
+ //}
 
 bool is_utf8(const std::string& str) {
     size_t i = 0, len = str.size();
@@ -84,7 +108,12 @@ std::vector<CaseRecord> Database::Search(
     }
 
     if (!text.empty()) {
-        sql += " AND CASETXTCONTENT LIKE ?";
+        if(isExact)
+            // sql += " AND CASETXTCONTENT LIKE ? COLLATE BINARY";
+            // case sensitive
+            sql += " AND CASETXTCONTENT GLOB ? COLLATE BINARY";
+        else
+            sql += " AND CASETXTCONTENT LIKE ?";
     }
     sqlite3_stmt* stmt;
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -96,6 +125,7 @@ std::vector<CaseRecord> Database::Search(
                     sqlite3_bind_text(stmt, idx++, val.c_str(), -1, SQLITE_STATIC);
                 } else {
                     std::string fuzzy = "%" + val + "%";
+                    // fuzzy.c_str() is not guaranteed to live after the call. must use SQLITE_TRANSIENT
                     sqlite3_bind_text(stmt, idx++, fuzzy.c_str(), -1, SQLITE_TRANSIENT);
                 }
             }
@@ -107,8 +137,13 @@ std::vector<CaseRecord> Database::Search(
         bind_cond(module);
         // bind_cond(text);
         if (!text.empty()) {
-            std::string fuzzy = "%" + text + "%";
-            sqlite3_bind_text(stmt, idx++, fuzzy.c_str(), -1, SQLITE_TRANSIENT);
+            if(isExact){
+                std::string fuzzy = "*" + text + "*";
+                sqlite3_bind_text(stmt, idx++, fuzzy.c_str(), -1, SQLITE_TRANSIENT);
+            }else{
+                std::string fuzzy = "%" + text + "%";
+                sqlite3_bind_text(stmt, idx++, fuzzy.c_str(), -1, SQLITE_TRANSIENT);
+            }
         }
         auto safe_get_text = [](sqlite3_stmt* s, int col) -> std::wstring {
             const char* content_utf8 = (const char*)sqlite3_column_text(s, col);

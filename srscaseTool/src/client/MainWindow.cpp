@@ -11,6 +11,7 @@
 #include "../helper.h"
 #include "../common/sysutil.h"
 
+#include "resource.h"
  #include "UploadDialog.h"
 
 
@@ -115,6 +116,28 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 	switch (uMsg) {
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
+        case IDC_CHECK_EXACT_SEARCH: {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            int w = rc.right - rc.left;
+            int h = rc.bottom - rc.top;
+            int contentX = state.splitterX + 6 + splitterW;
+            int contentWidth = max(100, w - contentX - xs);
+            int contentHeight = h - topSectionHeight - eh - ys * 2;
+            if (HIWORD(wParam) == BN_CLICKED) {
+                BOOL checked = (SendMessage(hCheckExactSearch, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                if (checked) {
+                    // shows up
+                    MoveWindow(hEditContentInfo, contentX, topSectionHeight, contentWidth, contentInfoH, false);
+                    MoveWindow(hEditContent, contentX, topSectionHeight + contentInfoH, contentWidth, contentHeight - contentInfoH, false);
+                }
+                else {
+                    MoveWindow(hEditContent, contentX, topSectionHeight, contentWidth, contentHeight, true);
+                }
+                ShowWindow(hEditContentInfo, checked ? SW_SHOW : SW_HIDE);
+            }
+            break;
+        }
 		case IDM_IMPORT_AUTOMATION:
 			HandleImportAutomationCase();
 			return 0;
@@ -141,15 +164,24 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 			break;
 
 		case IDC_COMBO_MODULE:
-			if (HIWORD(wParam) == CBN_SELCHANGE) {
-				SendMessage(m_hwnd, WM_COMMAND, (WPARAM)IDC_BTN_SEARCH, 0); // 触发搜索
-			}
+            switch(HIWORD(wParam)){
+                case CBN_SELCHANGE:
+                    // SendMessage(m_hwnd, WM_COMMAND, (WPARAM)IDC_BTN_SEARCH, 0); // 触发搜索
+                    break;
+                case CBN_EDITCHANGE:
+                    // Get current text from combo edit field
+                    TCHAR text[256] = {};
+                    GetWindowText(hComboModule, text, 256);
+                    // Filter items based on text
+                    FilterComboBox(hComboModule,g_db->GetAllModules(), text);
+                    break;
+            }
 			break;
 
 		case IDC_BTN_PREV:
 			if (pageIndex > 0) {
 				pageIndex--;
-				RefreshTable(hTable, allRecords, pageIndex, pageSize);
+				RefreshTable(hTable, allRecords, pageIndex, pageSize,m_searchExact);
 				UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
 			}
 			break;
@@ -157,7 +189,7 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 		case IDC_BTN_NEXT:
 			if ((pageIndex + 1) * pageSize < (int)allRecords.size()) {
 				pageIndex++;
-				RefreshTable(hTable, allRecords, pageIndex, pageSize);
+				RefreshTable(hTable, allRecords, pageIndex, pageSize,m_searchExact);
 				UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
 			}
 			break;
@@ -198,7 +230,6 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
 		}
 		break;
-
 	case WM_CREATE:
 		HandleCreate(hwnd);
 		return 0;
@@ -206,6 +237,7 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         return HandleSize();
     case WM_NOTIFY:
         return HandleNotify(lParam);
+
     case WM_PAINT:
         return HandlePaint();
     case WM_CTLCOLORSTATIC: {
@@ -260,12 +292,7 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                     // Visual feedback
                     InvalidateRect(m_hwnd, nullptr, FALSE);
                 }
-            else
-                {
-                    // Change cursor if near splitter
-                    if (mx >= state.splitterX && mx < state.splitterX + SPLITTER_WIDTH)
-                        SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
-                }
+                
             return 0;
         }
     case WM_LBUTTONUP:
@@ -277,6 +304,32 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 }
             return 0;
         }
+    case WM_UPDATE_PROGRESS:
+        {
+            // 处理进度更新消息
+            int percentComplete = static_cast<int>(wParam);
+            char* statusMessage = reinterpret_cast<char*>(lParam);
+
+            // 这里可以更新主窗口中的状态栏或其他进度指示器
+
+            // 释放消息中分配的字符串
+            free(statusMessage);
+            return 0;
+        }
+
+    case WM_UPLOAD_COMPLETE:
+        {
+            // 处理上传完成消息
+            bool success = (wParam != 0);
+            char* resultMessage = reinterpret_cast<char*>(lParam);
+
+            // 这里可以更新主窗口的状态
+
+            // 释放消息中分配的字符串
+            free(resultMessage);
+            return 0;
+        }
+    
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
@@ -362,7 +415,7 @@ LRESULT MainWindow::HandleSearch(){
 
     BOOL useRegex = (SendMessage(hCheckRegex, BM_GETCHECK, 0, 0) == BST_CHECKED);
     BOOL searchCbg = (SendMessage(hCheckCBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    BOOL searchExact = (SendMessage(hCheckExactSearch, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    m_searchExact = (SendMessage(hCheckExactSearch, BM_GETCHECK, 0, 0) == BST_CHECKED);
     wchar_t wsuite[64], wname[64], wid[64], wscriptid[64], wtext[128];
     wchar_t wmodule[64] = { 0 };
     GetWindowTextW(hEditSuite, wsuite, 64);
@@ -393,20 +446,8 @@ LRESULT MainWindow::HandleSearch(){
             module.empty() ? "" : module,
             text.empty() ? "" : text,
             searchCbg,
-            searchExact
+            m_searchExact
         );
-
-   //     records = g_db->Search(
-			//suite.empty() ? "" : "%" + suite + "%",
-			//name.empty() ? "" : "%" + name + "%",
-			//id.empty() ? "" : "%" + id + "%",
-			//scriptid.empty() ? "" : "%" + scriptid + "%",
-			//module.empty() ? "" : "%" + module + "%",
-			//text.empty() ? "" : "%" + text + "%",
-			//searchCbg,
-   //         searchExact
-			//);
-
 	}
 	else {
 		RE2 reg(text); // accept utf8 param
@@ -423,7 +464,7 @@ LRESULT MainWindow::HandleSearch(){
                                            id.empty() ? "" : "%" + id + "%",
                                            scriptid.empty() ? "" : "%" + scriptid + "%",
                                            module.empty() ? "" : "%" + module + "%",
-                                           "", searchCbg, searchExact);// 内容字段不先筛
+                                           "", searchCbg, m_searchExact);// 内容字段不先筛
             records.clear();
             //try {
             //std::wregex re(wtext, std::regex_constants::ECMAScript | std::regex_constants::icase);
@@ -452,7 +493,7 @@ LRESULT MainWindow::HandleSearch(){
 
     allRecords = records;
     pageIndex = 0;
-    RefreshTable(hTable, allRecords, pageIndex, pageSize);
+    RefreshTable(hTable, allRecords, pageIndex, pageSize, m_searchExact);
     UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
     return 0;
 }
@@ -491,7 +532,7 @@ void MainWindow::HandleGotoPage(){
                     return;
                 }
                 pageIndex = pageTarget - 1;
-                RefreshTable(hTable, allRecords, pageIndex, pageSize);
+                RefreshTable(hTable, allRecords, pageIndex, pageSize, m_searchExact);
                 UpdatePageStatus(hPageLabel, pageIndex, (int)allRecords.size(), pageSize);
             }
 void MainWindow::HandleSearchContent(WPARAM wParam){
@@ -571,8 +612,17 @@ void MainWindow::HandleCreate(HWND phwnd) {
 	SendMessage(hEditScriptID, EM_LIMITTEXT, 80, 0);
 
 	hLblModule = CreateLabel(phwnd, L"模块：", x, 0, 60, lh, IDC_STATIC_MODULE);
-	hComboModule = CreateWindowEx(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
-		searchInputStyle | CBS_DROPDOWNLIST, x + 60, 0, 160, eh * 8, phwnd, (HMENU)IDC_COMBO_MODULE, nullptr, nullptr);
+    int visible_items = 10; // Only allow 10 items visible in the drop-down
+    int combo_height = eh;  // Usually the height of the non-drop part (edit/static)
+    int dropdown_height = (visible_items + 1) * eh; // +1 because the combo box part needs its own space
+
+    hComboModule = CreateWindowEx(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+                                  WS_CHILD | WS_VISIBLE | CBS_DROPDOWN | WS_VSCROLL,
+                                  // searchInputStyle | CBS_DROPDOWNLIST | WS_VSCROLL |CBS_DROPDOWN,
+                                  x + 60, 0, 160, dropdown_height,
+                                  phwnd, (HMENU)IDC_COMBO_MODULE, (HINSTANCE)GetWindowLongPtr(phwnd, GWLP_HINSTANCE), nullptr);
+	// hComboModule = CreateWindowEx(WS_EX_CLIENTEDGE, L"COMBOBOX", nullptr,
+	// 	searchInputStyle | CBS_DROPDOWNLIST, x + 60, 0, 160, eh * 8, phwnd, (HMENU)IDC_COMBO_MODULE, nullptr, nullptr);
 
 	hLblText = CreateLabel(phwnd, L"内容：", x, 0, 60, lh, IDC_STATIC_TEXT);
 	hEditText = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", nullptr,
@@ -615,6 +665,17 @@ void MainWindow::HandleCreate(HWND phwnd) {
 		xs, top_height, tableWidth, tableHeight, phwnd, (HMENU)IDC_LISTVIEW, nullptr, nullptr);
 	ListView_SetExtendedListViewStyle(hTable, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 
+    hTool = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, nullptr,
+              WS_POPUP | TTS_ALWAYSTIP,
+              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        phwnd, nullptr, nullptr, nullptr);
+    TOOLINFO ti = { sizeof(ti) };
+    ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+    ti.hwnd = phwnd;
+    ti.uId  = (UINT_PTR)hTable;
+    ti.lpszText = LPSTR_TEXTCALLBACK; // 动态文本
+    SendMessage(hTool, TTM_ADDTOOL, 0, (LPARAM)&ti);
+
 	// 表头 - 调整列宽
 	LVCOLUMN lvc{};
 	lvc.mask = LVCF_TEXT | LVCF_WIDTH;
@@ -630,6 +691,14 @@ void MainWindow::HandleCreate(HWND phwnd) {
 	// 右侧内容区 - 调整位置和大小
 	int contentX = xs + tableWidth + xs;  // 与表格保持间距
 	int contentWidth = 340;
+
+	hEditContentInfo = CreateWindowExW(0, MSFTEDIT_CLASS, L"",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE |
+		ES_AUTOVSCROLL | WS_VSCROLL | ES_READONLY,
+		contentX, top_height, contentWidth, tableHeight,
+		phwnd, (HMENU)IDC_EDIT_CONTENTINFO, nullptr, nullptr);
+
+    ShowWindow(hEditContentInfo, m_searchExact ? SW_SHOW : SW_HIDE);
 	hEditContent = CreateWindowExW(0, MSFTEDIT_CLASS, L"",
 		WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE |
 		ES_AUTOVSCROLL | WS_VSCROLL | ES_READONLY,
@@ -669,7 +738,7 @@ void MainWindow::HandleCreate(HWND phwnd) {
 	HFONT modernFont = GetModernFont();
 	for (HWND h : {hLblSuite, hEditSuite, hLblName, hEditName, hLblID, hEditID, hLblScriptID, hEditScriptID,
 		hLblModule, hComboModule, hLblText, hEditText, hCheckRegex, hCheckCBG, hCheckExactSearch, hBtnSearch, hBtnReset,
-		hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent, hBtnNextMatch, hBtnPrevMatch, hStatusBar, hBtnGotoPage, hEditGotoPage}) {
+		hBtnPrev, hBtnNext, hPageLabel, hTable, hEditContent, hEditContentInfo, hBtnNextMatch, hBtnPrevMatch, hStatusBar, hBtnGotoPage, hEditGotoPage}) {
 		SendMessage(h, WM_SETFONT, (WPARAM)modernFont, TRUE);
 	}
 	for (HWND h : { hEditSuite, hEditName, hEditID, hEditScriptID, hEditText, hEditSearchRichEdit}) {
@@ -703,6 +772,9 @@ LRESULT MainWindow::HandleNotify(LPARAM lParam){
                 if (idx >= 0 && idx < (int)allRecords.size()) {
                     SetWindowTextW(hEditContent, std::wstring(
                                                               allRecords[idx].CASETXTCONTENT.begin(), allRecords[idx].CASETXTCONTENT.end()).c_str());
+
+                    std::wstring joined = string_util::joinWstrings(allRecords[idx].matched_lines);
+                    SetWindowTextW(hEditContentInfo, joined.c_str());
                     int len = GetWindowTextLengthW(hEditSearchRichEdit);
                     std::wstring searchText(len, L'\0');
                     if (len > 0) {
@@ -764,6 +836,22 @@ LRESULT MainWindow::HandleNotify(LPARAM lParam){
         //     }
         //     }
         // }
+    }
+    if (((LPNMHDR)lParam)->code == TTN_GETDISPINFO || ((LPNMHDR)lParam)->code == TTN_NEEDTEXT) {
+        NMTTDISPINFO* pdi = (NMTTDISPINFO*)lParam;
+        // 取鼠标当前项和列
+        POINT pt;
+        GetCursorPos(&pt);
+        ScreenToClient(hTable, &pt);
+        LVHITTESTINFO hit = {0};
+        hit.pt = pt;
+        int iItem = ListView_HitTest(hTable, &hit);
+        if (iItem >= 0) {
+            wchar_t buf[1024];
+            ListView_GetItemText(hTable, iItem, hit.iSubItem, buf, ARRAYSIZE(buf));
+            pdi->lpszText = buf; // 可以包含'\n'，ToolTip自动多行
+            return TRUE;
+        }
     }
     return 0;
 }
@@ -898,7 +986,15 @@ void MainWindow::LayoutChildren(HWND hWnd, SplitterState& state) {
     int buttonY = topSectionHeight + contentHeight + ys;
 
     deferMove(hTable, xs, topSectionHeight, tableWidth, contentHeight);
-    deferMove(hEditContent, contentX, topSectionHeight, contentWidth, contentHeight);
+    if (m_searchExact) {
+		deferMove(hEditContentInfo, contentX, topSectionHeight, contentWidth, contentInfoH);
+		deferMove(hEditContent, contentX, topSectionHeight + contentInfoH, contentWidth, contentHeight- contentInfoH);
+    }
+    else {
+		deferMove(hEditContent, contentX, topSectionHeight, contentWidth, contentHeight);
+    }
+
+
     deferMove(hEditSearchRichEdit,contentX, topSectionHeight + contentHeight, 200, eh );
     deferMove(hBtnPrevMatch,contentX + 200 + padding, topSectionHeight + contentHeight, 30, eh );
     deferMove(hBtnNextMatch,contentX + 200 +  padding  + 30, topSectionHeight + contentHeight, 30, eh );

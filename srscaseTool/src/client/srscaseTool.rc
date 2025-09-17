@@ -1,0 +1,68 @@
+﻿#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+#include "winres.h"
+
+IDI_APP_ICON ICON "icons/app.ico"
+
+IDM_MAIN_MENU MENU
+BEGIN
+POPUP "数据"
+BEGIN
+MENUITEM "导入自动化用例", IDM_IMPORT_AUTOMATION
+MENUITEM "导入测试管理系统用例", IDM_IMPORT_MANAGEMENT
+END
+END
+
+// 上传对话框模板
+IDD_UPLOAD_DIALOG DIALOGEX 0, 0, 350, 180
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "上传用例数据"
+FONT 9, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+LTEXT           "文件:", IDC_LABEL_FILE, 7, 10, 20, 8
+LTEXT           "", IDC_FILE_INFO, 35, 10, 308, 8
+LTEXT           "上传进度:", IDC_LABEL_PROGRESS, 7, 30, 40, 8
+CONTROL         "", IDC_PROGRESS, "msctls_progress32", WS_BORDER, 7, 45, 336, 14
+LTEXT           "准备上传...", IDC_STATUS, 7, 65, 336, 8
+DEFPUSHBUTTON   "上传", IDOK, 235, 159, 50, 14
+PUSHBUTTON      "取消", IDC_CANCEL, 293, 159, 50, 14
+END
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 中文(简体，中国) 资源
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE 4, 2
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE  
+BEGIN
+    "#include ""winres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE  
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+#endif    // 中文(简体，中国) 资源
+
+
+

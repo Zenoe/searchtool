@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <thread>
+#include "resource.h"
 #include "CSVParser.h"
 #include "HttpClient.h"
 #include "../common/Logger.h"
@@ -23,8 +24,8 @@ private:
 
     void InitializeDialog(HWND hwnd);
     void StartUpload(HWND hwnd);
-    void UpdateProgress(int percentComplete, const std::string& status);
-    void UploadComplete(bool success, const std::string& message);
+    void UpdateProgress(int percentComplete, const std::wstring& status);
+    void UploadComplete(bool success, const std::wstring& message);
 
     HWND m_hParent;
     HWND m_hDlg;
@@ -42,8 +43,8 @@ private:
     bool m_uploadComplete;
     bool m_uploadSuccess;
 
-    static constexpr int IDD_UPLOAD_DIALOG = 100;
-    static constexpr int IDC_PROGRESS = 101;
-    static constexpr int IDC_STATUS = 102;
-    static constexpr int IDC_CANCEL = 103;
+    //static constexpr int IDD_UPLOAD_DIALOG = 100;
+    //static constexpr int IDC_PROGRESS = 101;
+    //static constexpr int IDC_STATUS = 102;
+    //static constexpr int IDC_CANCEL = 103;
 };

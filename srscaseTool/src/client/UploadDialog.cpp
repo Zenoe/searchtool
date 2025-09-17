@@ -1,7 +1,7 @@
 ﻿#include "UploadDialog.h"
 #include <commctrl.h>
 #include <sstream>
-
+#include "../common/stringutil.h"
 // 对话框模板资源ID (定义在resource.h中)
 // 实际项目中需要在资源文件中定义对话框模板
 
@@ -143,7 +143,7 @@ void UploadDialog::StartUpload(HWND hwnd) {
     m_uploadThread = std::thread([this]() {
         try {
             // 更新UI状态
-            UpdateProgress(5, "正在解析CSV文件...");
+            UpdateProgress(5, L"正在解析CSV文件...");
 
             // 解析CSV文件
             if (m_isAutomationCase) {
@@ -151,11 +151,11 @@ void UploadDialog::StartUpload(HWND hwnd) {
 
                 // 检查是否有有效数据
                 if (cases.empty()) {
-                    UploadComplete(false, "CSV文件中没有有效的自动化用例数据");
+                    UploadComplete(false, L"CSV文件中没有有效的自动化用例数据");
                     return;
                 }
 
-                UpdateProgress(30, "正在上传 " + std::to_string(cases.size()) + " 条自动化用例...");
+                UpdateProgress(30, L"正在上传 " + string_util::utf8_to_wstring(std::to_string(cases.size())) + L" 条自动化用例...");
 
                 // 上传数据
                 std::string serverUrl = "http://localhost:8080"; // 实际应用中应从配置中读取
@@ -165,14 +165,14 @@ void UploadDialog::StartUpload(HWND hwnd) {
                     m_overwriteExisting,
                     [this](int percent, const std::string& status) {
                         // 传递上传进度回调
-                        UpdateProgress(30 + (percent * 70 / 100), status);
+                        UpdateProgress(30 + (percent * 70 / 100), string_util::utf8_to_wstring(status));
                     }
                 );
 
                 if (success) {
-                    UploadComplete(true, "自动化用例上传成功");
+                    UploadComplete(true, L"自动化用例上传成功");
                 } else {
-                    UploadComplete(false, "上传失败: " + m_httpClient->GetLastError());
+                    UploadComplete(false, L"上传失败: " + string_util::utf8_to_wstring(m_httpClient->GetLastError()));
                 }
             }
             else {
@@ -180,11 +180,11 @@ void UploadDialog::StartUpload(HWND hwnd) {
 
                 // 检查是否有有效数据
                 if (cases.empty()) {
-                    UploadComplete(false, "CSV文件中没有有效的测试管理系统用例数据");
+                    UploadComplete(false, L"CSV文件中没有有效的测试管理系统用例数据");
                     return;
                 }
 
-                UpdateProgress(30, "正在上传 " + std::to_string(cases.size()) + " 条测试管理系统用例...");
+                UpdateProgress(30, L"正在上传 " + string_util::utf8_to_wstring(std::to_string(cases.size())) + L" 条测试管理系统用例...");
 
                 // 上传数据
                 std::string serverUrl = "http://localhost:8080"; // 实际应用中应从配置中读取
@@ -194,32 +194,32 @@ void UploadDialog::StartUpload(HWND hwnd) {
                     m_overwriteExisting,
                     [this](int percent, const std::string& status) {
                         // 传递上传进度回调
-                        UpdateProgress(30 + (percent * 70 / 100), status);
+                        UpdateProgress(30 + (percent * 70 / 100), string_util::utf8_to_wstring(status));
                     }
                 );
 
                 if (success) {
-                    UploadComplete(true, "测试管理系统用例上传成功");
+                    UploadComplete(true, L"测试管理系统用例上传成功");
                 } else {
-                    UploadComplete(false, "上传失败: " + m_httpClient->GetLastError());
+                    UploadComplete(false, L"上传失败: " + string_util::utf8_to_wstring(m_httpClient->GetLastError()));
                 }
             }
         }
         catch (const std::exception& e) {
-            UploadComplete(false, "上传过程中发生错误: " + std::string(e.what()));
+            UploadComplete(false, L"上传过程中发生错误: " + string_util::utf8_to_wstring(e.what()));
         }
     });
 }
 
-void UploadDialog::UpdateProgress(int percentComplete, const std::string& status) {
+void UploadDialog::UpdateProgress(int percentComplete, const std::wstring& status) {
     // 由于这个函数会从工作线程调用，需要使用PostMessage或SendMessage来更新UI
 
     // 创建一个带有状态消息的堆分配字符串，将在消息处理中释放
-    char* statusCopy = _strdup(status.c_str());
+    wchar_t* statusCopy = _wcsdup(status.c_str());
 
     // 使用PostMessage发送自定义消息更新UI
     // 注：WM_APP+1是自定义消息ID，实际应用中应定义常量
-    PostMessage(m_hDlg, WM_APP+1, percentComplete, reinterpret_cast<LPARAM>(statusCopy));
+PostMessage(m_hDlg, WM_UPDATE_PROGRESS, percentComplete, reinterpret_cast<LPARAM>(statusCopy));
 
     // 实际更新UI的代码
     if (m_hDlg) {
@@ -233,14 +233,14 @@ void UploadDialog::UpdateProgress(int percentComplete, const std::string& status
     }
 }
 
-void UploadDialog::UploadComplete(bool success, const std::string& message) {
+void UploadDialog::UploadComplete(bool success, const std::wstring& message) {
     m_uploadComplete = true;
     m_uploadSuccess = success;
 
     if (m_hDlg) {
-        // 使用PostMessage发送完成消息
-        char* messageCopy = _strdup(message.c_str());
-        PostMessage(m_hDlg, WM_APP+2, success ? 1 : 0, reinterpret_cast<LPARAM>(messageCopy));
+        // 使用 _wcsdup 正确复制宽字符
+        wchar_t* messageCopy = _wcsdup(message.c_str());
+        PostMessage(m_hDlg, WM_UPLOAD_COMPLETE, success ? 1 : 0, reinterpret_cast<LPARAM>(messageCopy));
 
         // 更新UI
         UpdateProgress(100, message);
@@ -250,13 +250,39 @@ void UploadDialog::UploadComplete(bool success, const std::string& message) {
         SetDlgItemText(m_hDlg, IDCANCEL, L"关闭");
 
         // 显示消息框通知用户
-        std::wstring wideMessage;
-        wideMessage.assign(message.begin(), message.end());
-
+        // 不用重复赋值，直接用 message
         if (success) {
-            MessageBox(m_hDlg, wideMessage.c_str(), L"上传成功", MB_OK | MB_ICONINFORMATION);
-        } else {
-            MessageBox(m_hDlg, wideMessage.c_str(), L"上传失败", MB_OK | MB_ICONERROR);
+            MessageBox(m_hDlg, message.c_str(), L"上传成功", MB_OK | MB_ICONINFORMATION);
+        }
+        else {
+            MessageBox(m_hDlg, message.c_str(), L"上传失败", MB_OK | MB_ICONERROR);
         }
     }
 }
+//void UploadDialog::UploadComplete(bool success, const std::wstring& message) {
+//    m_uploadComplete = true;
+//    m_uploadSuccess = success;
+//
+//    if (m_hDlg) {
+//        // 使用PostMessage发送完成消息
+//        wchar* messageCopy = _strdup(message.c_str());
+//PostMessage(m_hDlg, WM_UPLOAD_COMPLETE, success ? 1 : 0, reinterpret_cast<LPARAM>(messageCopy));
+//
+//        // 更新UI
+//        UpdateProgress(100, message);
+//
+//        // 更新按钮状态
+//        EnableWindow(GetDlgItem(m_hDlg, IDOK), FALSE);
+//        SetDlgItemText(m_hDlg, IDCANCEL, L"关闭");
+//
+//        // 显示消息框通知用户
+//        std::wstring wideMessage;
+//        wideMessage.assign(message.begin(), message.end());
+//
+//        if (success) {
+//            MessageBox(m_hDlg, wideMessage.c_str(), L"上传成功", MB_OK | MB_ICONINFORMATION);
+//        } else {
+//            MessageBox(m_hDlg, wideMessage.c_str(), L"上传失败", MB_OK | MB_ICONERROR);
+//        }
+//    }
+//}

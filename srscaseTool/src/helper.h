@@ -84,7 +84,7 @@ HWND CreateLabel(HWND parent, LPCWSTR text, int x, int y, int w, int h, UINT_PTR
     return CreateWindowEx(0, L"STATIC", text, WS_CHILD | WS_VISIBLE, x, y, w, h, parent, (HMENU)id, NULL, NULL);
 }
 
-void RefreshTable(HWND hList, const std::vector<CaseRecord>& data, int pageIndex, int pageSize, bool showExtra)
+void RefreshTable(HWND hList, const std::vector<CaseRecord>& data, int pageIndex, int pageSize, bool showExtra = false)
 {
     ListView_DeleteAllItems(hList);
 
@@ -103,7 +103,14 @@ void RefreshTable(HWND hList, const std::vector<CaseRecord>& data, int pageIndex
         ListView_SetItemText(hList, lvi.iItem, 4, (LPWSTR)data[i].COMPOSITONNAME.c_str());
         ListView_SetItemText(hList, lvi.iItem, 5, (LPWSTR)data[i].REMARK.c_str());
         if(showExtra){
-            ListView_SetItemText(hList, lvi.iItem, 6, string_util::joinWstrings( data[i].matched_lines ));
+            // std::wstring joined = string_util::joinWstrings(data[i].matched_lines);
+            // SetWindowTextW(hInfo, joined.c_str());
+            // LVI expects pointer: use joined.c_str(), joined will be alive during the call.
+            // ListView_SetItemText(hList, lvi.iItem, 5, (LPWSTR)joined.c_str());
+            // auto tmp = string_util::joinWstrings( data[i].matched_lines ).c_str();
+            // ListView_SetItemText(hList, lvi.iItem, 5, (LPWSTR)tmp);
+        }else{
+            // ListView_SetItemText(hList, lvi.iItem, 5, (LPWSTR)data[i].REMARK.c_str());
         }
     }
 }
@@ -234,5 +241,56 @@ void HighlightMatches(HWND hRichEdit, const std::vector<size_t>& matchPositions,
     else {
         // Deselect if no matches
         SendMessageW(hRichEdit, EM_SETSEL, -1, 0);
+    }
+}
+
+
+void FilterComboBox(HWND hCombo, const std::vector<std::string>& itemList, const std::wstring& filter) {
+    // Save current selection (edit text) and cursor position
+    TCHAR currText[256] = {};
+    GetWindowText(hCombo, currText, 256);
+    DWORD startPos, endPos;
+    SendMessage(hCombo, CB_GETEDITSEL, (WPARAM)&startPos, (LPARAM)&endPos);
+
+    // Prevent flicker during update
+    SendMessage(hCombo, WM_SETREDRAW, FALSE, 0);
+
+    // Remove all items
+    SendMessage(hCombo, CB_RESETCONTENT, 0, 0);
+
+    // Add items matching filter
+    for (const auto& item : itemList) {
+        const std::wstring witem = string_util::utf8_to_wstring(item);
+        // Case insensitive search - check if filter is substring of item
+        if (filter.empty()) {
+            SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)witem.c_str());
+        } else {
+            // Convert both strings to lowercase for case-insensitive comparison
+            std::wstring itemLower = witem;
+            std::wstring filterLower = filter;
+            std::transform(itemLower.begin(), itemLower.end(), itemLower.begin(), towlower);
+            std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), towlower);
+
+            if (itemLower.find(filterLower) != std::wstring::npos) {
+                SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)witem.c_str());
+            }
+        }
+    }
+
+    // Restore edit text and cursor position
+    SetWindowText(hCombo, currText);
+    SendMessage(hCombo, CB_SETEDITSEL, 0, MAKELPARAM(startPos, endPos));
+
+    SendMessage(hCombo, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(hCombo, nullptr, TRUE); // Redraw
+
+    // Show dropdown list if there are matching items
+    int itemCount = SendMessage(hCombo, CB_GETCOUNT, 0, 0);
+    if (itemCount > 0) {
+        // Show the dropdown list
+        SendMessage(hCombo, CB_SHOWDROPDOWN, TRUE, 0);
+    } else {
+        // Hide dropdown if no items match
+        SendMessage(hCombo, CB_SHOWDROPDOWN, FALSE, 0);
     }
 }

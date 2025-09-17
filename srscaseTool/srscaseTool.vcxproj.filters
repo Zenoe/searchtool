@@ -13,11 +13,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="srscaseTool.rc">
-      <Filter>资源文件</Filter>
-    </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
     <Image Include="small.ico">
       <Filter>资源文件</Filter>
     </Image>
@@ -74,5 +69,17 @@
     <ClInclude Include="src\client\HttpClient.h">
       <Filter>client</Filter>
     </ClInclude>
+    <ClInclude Include="src\client\resource.h">
+      <Filter>资源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="src\common\Utils.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\client\srscaseTool.rc">
+      <Filter>资源文件</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

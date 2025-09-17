@@ -21,6 +21,8 @@ constexpr int row2Y = row1Y + eh + ys;
 constexpr int topSectionHeight = row2Y + eh + ys + 10;
 
 
+constexpr int contentInfoH = 200;
+
 const int SPLITTER_WIDTH = 4;
 const int MIN_PANEL_WIDTH = 80;
 struct SplitterState
@@ -53,6 +55,7 @@ enum {
     IDC_EDIT_TEXT,
     IDC_LISTVIEW,
     IDC_EDIT_CONTENT,
+    IDC_EDIT_CONTENTINFO,
     IDC_EDIT_SEARCH_RICH_CONTENT,
     IDC_BTN_PREVTEXT,
     IDC_BTN_NEXTTEXT,

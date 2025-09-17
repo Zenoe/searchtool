@@ -38,12 +38,13 @@ private:
     HWND m_hwnd;
 
     HWND hLblSuite, hEditSuite, hLblName, hEditName, hLblID, hEditID, hLblScriptID, hEditScriptID, hLblModule, hComboModule, hLblText, hEditText;
-    HWND hTable, hEditContent, hBtnPrev, hBtnNext, hBtnSearch, hPageLabel, hSplitter;
+    HWND hTable, hEditContent, hEditContentInfo, hBtnPrev, hBtnNext, hBtnSearch, hPageLabel, hSplitter;
     HWND hEditSearchRichEdit, hBtnReset, hStatusBar;
     HWND hCheckRegex;
     HWND hBtnPrevMatch, hBtnNextMatch, hEditGotoPage, hBtnGotoPage;
     HWND hCheckCBG, hCheckExactSearch;
     HWND hBtnClearCasePkg;
+    HWND hTool;
 
     HINSTANCE m_hInstance;
     std::shared_ptr<Logger> m_logger;
@@ -56,6 +57,7 @@ private:
     std::wstring lastSearchText;
     int m_lastRow = -1;
     int m_lastCol = -1;
+    bool m_searchExact = false;
     static constexpr int IDM_IMPORT_AUTOMATION = 101;
     static constexpr int IDM_IMPORT_MANAGEMENT = 102;
 };
