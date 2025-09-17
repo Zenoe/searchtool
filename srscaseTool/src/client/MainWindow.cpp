@@ -412,7 +412,6 @@ void MainWindow::HandleImportManagementCase() {
 }
 
 LRESULT MainWindow::HandleSearch(){
-
     BOOL useRegex = (SendMessage(hCheckRegex, BM_GETCHECK, 0, 0) == BST_CHECKED);
     BOOL searchCbg = (SendMessage(hCheckCBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
     m_searchExact = (SendMessage(hCheckExactSearch, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -430,6 +429,12 @@ LRESULT MainWindow::HandleSearch(){
     std::string scriptid = string_util::wstr_to_utf8(wscriptid);
     std::string module = string_util::wstr_to_utf8(wmodule);
     std::string text = string_util::wstr_to_utf8(wtext);
+    contentSearchText_ = wtext;
+    SetWindowTextW(hEditSearchRichEdit, L"");
+    SetWindowTextW(hEditContent, L"");
+    SetWindowTextW(hEditContentInfo, L"");
+
+
     std::vector<CaseRecord> records;
 
     HWND hWait = nullptr;
@@ -782,6 +787,8 @@ LRESULT MainWindow::HandleNotify(LPARAM lParam){
                         SendMessage(m_hwnd, WM_COMMAND,
                                     MAKEWPARAM(IDC_EDIT_SEARCH_RICH_CONTENT, EN_CHANGE),
                                     (LPARAM)searchText.c_str());
+                    }else{
+                        SetWindowTextW(hEditSearchRichEdit, contentSearchText_.c_str());
                     }
                 }
             }

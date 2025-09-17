@@ -1,6 +1,7 @@
 ﻿#include "Database.h"
 #include <stdexcept>
 #include <sstream>
+#include "common/Utils.h"
 #include "common/stringutil.h"
 
 Database::Database(const std::string& dbfile) {
@@ -75,7 +76,74 @@ bool is_utf8(const std::string& str) {
     }
     return true;
 }
+std::vector<size_t> preprocessBadChar(const std::wstring& pattern) {
+    constexpr size_t ALPHABET_SIZE = 65536; // Unicode BMP
+    std::vector<size_t> badChar(ALPHABET_SIZE, -1);
+    for (size_t i = 0; i < pattern.length(); ++i) {
+        badChar[static_cast<size_t>(pattern[i])] = i;
+    }
+    return badChar;
+}
 
+// Good suffix preprocessing
+std::vector<size_t> preprocessGoodSuffix(const std::wstring& pattern) {
+    size_t m = pattern.length();
+    std::vector<size_t> goodSuffix(m + 1, m);
+    std::vector<size_t> suffix(m + 1, 0);
+
+    suffix[m] = m;
+    int f = 0, g = m - 1;
+    for (int i = static_cast<int>(m) - 1; i >= 0; --i) {
+        if (i > g && suffix[i + m - f] < i - g) {
+            suffix[i] = suffix[i + m - f];
+        }
+        else {
+            g = i;
+            f = i;
+            while (g >= 0 && pattern[g] == pattern[g + m - f]) {
+                --g;
+            }
+            suffix[i] = f - g;
+        }
+    }
+
+    for (size_t i = 0; i < m; ++i)
+        goodSuffix[m - suffix[i]] = m - i - 1;
+    for (size_t i = 1; i <= m; ++i)
+        if (goodSuffix[i] == m)
+            goodSuffix[i] = goodSuffix[i - 1];
+
+    return goodSuffix;
+}
+
+std::vector<size_t> boyerMooreSearch(const std::wstring& text, const std::wstring& pattern) {
+    std::vector<size_t> result;
+    size_t n = text.length();
+    size_t m = pattern.length();
+    if (m == 0 || n == 0 || m > n)
+        return result;
+
+    auto badChar = preprocessBadChar(pattern);
+    auto goodSuffix = preprocessGoodSuffix(pattern);
+
+    size_t s = 0;
+    while (s <= n - m) {
+        int j = static_cast<int>(m) - 1;
+        while (j >= 0 && pattern[j] == text[s + j])
+            --j;
+
+        if (j < 0) {
+            result.push_back(s); // match found
+            s += goodSuffix[0];
+        }
+        else {
+            size_t bcShift = static_cast<size_t>(j) - badChar[static_cast<size_t>(text[s + j])];
+            size_t gsShift = goodSuffix[j + 1];
+            s += (std::max<size_t>)(1, (std::max)(bcShift, gsShift));
+        }
+    }
+    return result;
+}
 std::vector<CaseRecord> Database::Search(
     const std::string& suite,
     const std::string& name,
@@ -167,11 +235,20 @@ std::vector<CaseRecord> Database::Search(
                 std::wstring line;
                 int line_no = 1;
                 while (std::getline(iss, line)) {
+                    if (line.find(target) == std::wstring::npos) {
+                        ++line_no;
+                        continue;
+                    }
                     std::vector<std::wstring> units = string_util::splitByFourSpaces(line);
-                    for(auto unit: units){
-                        if(unit.find(target) != std::wstring::npos){
-                            rec.matched_lines.push_back(std::to_wstring(line_no) + L":" + unit);
-                        }
+                    for(const auto & unit: units){
+                        if (!boyerMooreSearch( unit, target).empty()) {
+                            rec.matched_lines.emplace_back(std::to_wstring(line_no) + L": " + unit);
+						}
+                    // for(auto unit: units){
+                         //if(unit.find(target) != std::wstring::npos){
+                         //    // rec.matched_lines.push_back(std::to_wstring(line_no) + L": " + unit);
+                         //    rec.matched_lines.emplace_back(std::to_wstring(line_no) + L": " + unit);
+                         //}
                     }
 
                     // push word

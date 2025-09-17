@@ -54,6 +54,7 @@ private:
 	std::vector<CaseRecord> allRecords; // 搜索完整数据
     SplitterState state;
 
+    std::wstring contentSearchText_;
     std::wstring lastSearchText;
     int m_lastRow = -1;
     int m_lastCol = -1;
