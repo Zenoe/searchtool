@@ -16,7 +16,7 @@ public:
     ~HttpClient();
 
     // Callback for progress updates
-    using ProgressCallback = std::function<void(int percentComplete, const std::string& status)>;
+    using ProgressCallback = std::function<void(size_t percentComplete, const std::string& status)>;
 
     // Upload methods
     bool UploadAutomationCases(

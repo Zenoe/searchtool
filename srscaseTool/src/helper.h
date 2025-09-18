@@ -285,7 +285,7 @@ void FilterComboBox(HWND hCombo, const std::vector<std::string>& itemList, const
     InvalidateRect(hCombo, nullptr, TRUE); // Redraw
 
     // Show dropdown list if there are matching items
-    int itemCount = SendMessage(hCombo, CB_GETCOUNT, 0, 0);
+    LRESULT itemCount = SendMessage(hCombo, CB_GETCOUNT, 0, 0);
     if (itemCount > 0) {
         // Show the dropdown list
         SendMessage(hCombo, CB_SHOWDROPDOWN, TRUE, 0);
